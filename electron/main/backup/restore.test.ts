@@ -59,7 +59,13 @@ describe('restoreBackup', () => {
     openDbs.push(source)
     runMigrations(source, MIGRATIONS_FOLDER)
     source.insert(pacientes)
-      .values({ id: uuidv7(), nome: 'Paciente X', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
+      .values({
+        id: uuidv7(),
+        nome: 'Paciente X',
+        nomeBusca: 'paciente x',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      })
       .run()
 
     const { keysFile } = await createKeysFile('senha-teste')

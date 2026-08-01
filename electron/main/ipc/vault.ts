@@ -13,8 +13,15 @@ import type { KeySession } from '../crypto/session'
 import { openDatabase, type PsiTrackDatabase } from '../db/connection'
 import { runMigrations } from '../db/migrate'
 import { getDbPath, getKeysFilePath, getMigrationsFolder } from '../paths'
+import { safely } from './result'
 
 let db: PsiTrackDatabase | null = null
+
+/** Usado pelos handlers de outros domínios (paciente, responsável, ...) depois que o cofre foi desbloqueado. */
+export function getDb(): PsiTrackDatabase {
+  if (!db) throw new Error('Cofre travado: não há conexão de banco em memória.')
+  return db
+}
 
 function openAndMigrate(dek: Buffer): void {
   db = openDatabase({ filePath: getDbPath(), dek })
@@ -23,23 +30,6 @@ function openAndMigrate(dek: Buffer): void {
   // CLAUDE.md de "snapshot antes de migrar banco já existente" — quando
   // houver, o backup precisa entrar aqui antes do runMigrations.
   runMigrations(db, getMigrationsFolder())
-}
-
-export type VaultResult<T extends object = Record<string, never>> = ({ ok: true } & T) | { ok: false; error: string }
-
-/**
- * `ipcMain.handle` deixando o erro escapar via `throw` não dá uma mensagem
- * limpa no renderer — o Electron embrulha em algo como
- * "Error invoking remote method 'vault:unlock': Error: Senha incorreta.".
- * Por isso os handlers abaixo capturam o erro e devolvem
- * `{ ok: false, error }` como valor normal, nunca como rejeição de promise.
- */
-async function safely<T extends object>(work: () => Promise<T> | T): Promise<VaultResult<T>> {
-  try {
-    return { ok: true, ...(await work()) }
-  } catch (error) {
-    return { ok: false, error: (error as Error).message }
-  }
 }
 
 /** Handlers do domínio "vault": senha mestra, recovery key, auto-lock. */

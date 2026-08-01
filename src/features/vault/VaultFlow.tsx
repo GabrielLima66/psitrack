@@ -21,6 +21,30 @@ export function VaultFlow({ children }: VaultFlowProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // 'unlocked' e 'locked' mantêm `children` montado o tempo todo — o
+  // auto-lock é uma sobreposição visual, não uma troca de tela. Desmontar o
+  // app perderia o estado em memória de um formulário aberto e sujo (rascunho
+  // não é persistido em disco de propósito — "voltar exatamente de onde
+  // parou" só funciona se o React nunca desmontar a árvore por baixo).
+  if (store.screen === 'unlocked' || store.screen === 'locked') {
+    return (
+      <>
+        {children}
+        {store.screen === 'locked' && (
+          <div className="fixed inset-0 z-50">
+            <AutoLockScreen
+              busy={store.authBusy}
+              error={store.authError}
+              lastSection={store.lastSection}
+              onSubmit={store.unlock}
+              onForgotPassword={store.goToRecoveryUnlock}
+            />
+          </div>
+        )}
+      </>
+    )
+  }
+
   switch (store.screen) {
     case 'loading':
       return <div className="h-screen w-full bg-background" />
@@ -64,20 +88,6 @@ export function VaultFlow({ children }: VaultFlowProps) {
           onBackToPassword={store.goToPasswordUnlock}
         />
       )
-
-    case 'locked':
-      return (
-        <AutoLockScreen
-          busy={store.authBusy}
-          error={store.authError}
-          lastSection={store.lastSection}
-          onSubmit={store.unlock}
-          onForgotPassword={store.goToRecoveryUnlock}
-        />
-      )
-
-    case 'unlocked':
-      return <>{children}</>
 
     default:
       return null

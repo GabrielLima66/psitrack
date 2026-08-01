@@ -26,6 +26,7 @@ beforeEach(() => {
     .values({
       id: pacienteId,
       nome: 'Paciente Teste',
+      nomeBusca: 'paciente teste',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     })
@@ -41,7 +42,7 @@ describe('trigger append-only de prontuario_evolucao', () => {
   it('rejeita UPDATE', () => {
     const id = uuidv7()
     db.insert(prontuarioEvolucao)
-      .values({ id, pacienteId, conteudo: 'evolução original', createdAt: new Date().toISOString() })
+      .values({ id, pacienteId, conteudo: 'evolução original', dataSessao: '2026-01-15', createdAt: new Date().toISOString() })
       .run()
 
     expect(() =>
@@ -52,16 +53,36 @@ describe('trigger append-only de prontuario_evolucao', () => {
   it('rejeita DELETE', () => {
     const id = uuidv7()
     db.insert(prontuarioEvolucao)
-      .values({ id, pacienteId, conteudo: 'evolução original', createdAt: new Date().toISOString() })
+      .values({ id, pacienteId, conteudo: 'evolução original', dataSessao: '2026-01-15', createdAt: new Date().toISOString() })
       .run()
 
     expect(() => db.delete(prontuarioEvolucao).where(eq(prontuarioEvolucao.id, id)).run()).toThrow()
   })
 
+  // Regressão pós-migration 0002: ADD COLUMN não deve ter enfraquecido a
+  // trigger — tentar mexer nas colunas novas (dataSessao/tipo) também tem
+  // que ser bloqueado, não só as colunas que já existiam na 0001.
+  it('rejeita UPDATE que mexe só nas colunas novas (dataSessao/tipo)', () => {
+    const id = uuidv7()
+    db.insert(prontuarioEvolucao)
+      .values({ id, pacienteId, conteudo: 'evolução original', dataSessao: '2026-01-15', createdAt: new Date().toISOString() })
+      .run()
+
+    expect(() =>
+      db.update(prontuarioEvolucao).set({ dataSessao: '2026-02-01', tipo: 'contato' }).where(eq(prontuarioEvolucao.id, id)).run()
+    ).toThrow()
+  })
+
   it('correção via nova linha com retifica_id funciona normalmente', () => {
     const originalId = uuidv7()
     db.insert(prontuarioEvolucao)
-      .values({ id: originalId, pacienteId, conteudo: 'evolução com erro de digitação', createdAt: new Date().toISOString() })
+      .values({
+        id: originalId,
+        pacienteId,
+        conteudo: 'evolução com erro de digitação',
+        dataSessao: '2026-01-15',
+        createdAt: new Date().toISOString()
+      })
       .run()
 
     const retificacaoId = uuidv7()
@@ -71,6 +92,8 @@ describe('trigger append-only de prontuario_evolucao', () => {
         pacienteId,
         conteudo: 'evolução corrigida',
         retificaId: originalId,
+        motivoRetificacao: 'erro de digitação no texto original',
+        dataSessao: '2026-01-15',
         createdAt: new Date().toISOString()
       })
       .run()

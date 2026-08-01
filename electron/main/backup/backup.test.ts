@@ -30,13 +30,19 @@ function seedSourceDb(dek: Buffer, dir: string): PsiTrackDatabase {
 
   const pacienteId = uuidv7()
   db.insert(pacientes)
-    .values({ id: pacienteId, nome: 'Paciente Teste', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
+    .values({
+      id: pacienteId,
+      nome: 'Paciente Teste',
+      nomeBusca: 'paciente teste',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    })
     .run()
   db.insert(prontuarioEvolucao)
-    .values({ id: uuidv7(), pacienteId, conteudo: 'evolução 1', createdAt: new Date().toISOString() })
+    .values({ id: uuidv7(), pacienteId, conteudo: 'evolução 1', dataSessao: '2026-01-10', createdAt: new Date().toISOString() })
     .run()
   db.insert(prontuarioEvolucao)
-    .values({ id: uuidv7(), pacienteId, conteudo: 'evolução 2', createdAt: new Date().toISOString() })
+    .values({ id: uuidv7(), pacienteId, conteudo: 'evolução 2', dataSessao: '2026-01-12', createdAt: new Date().toISOString() })
     .run()
 
   return db
@@ -67,7 +73,7 @@ describe('runBackup', () => {
     expect(manifest.verification.integrityCheck).toBe('ok')
     expect(manifest.verification.cipherIntegrityCheckOk).toBe(true)
     expect(manifest.verification.rowCountsMatchSource).toBe(true)
-    expect(manifest.schemaVersion).toBe(2) // duas migrations em electron/main/db/migrations
+    expect(manifest.schemaVersion).toBe(3) // três migrations em electron/main/db/migrations
 
     const restored = openDatabase({ filePath: snapshotPath, dek })
     openDbs.push(restored)

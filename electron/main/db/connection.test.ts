@@ -29,7 +29,13 @@ describe('openDatabase', () => {
     const db = openDatabase({ filePath, dek })
     runMigrations(db, MIGRATIONS_FOLDER)
     db.insert(pacientes)
-      .values({ id: uuidv7(), nome: 'Teste', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
+      .values({
+        id: uuidv7(),
+        nome: 'Teste',
+        nomeBusca: 'teste',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      })
       .run()
 
     expect(db.select().from(pacientes).all()).toHaveLength(1)
@@ -73,6 +79,7 @@ describe('openDatabase', () => {
       .values({
         id: uuidv7(),
         nome: MARKER,
+        nomeBusca: MARKER.toLowerCase(),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       })
