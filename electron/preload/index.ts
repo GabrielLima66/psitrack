@@ -89,6 +89,35 @@ export interface ResponsavelInput {
   pagador?: boolean
 }
 
+export type TipoEvolucao = 'sessao' | 'contato' | 'administrativo'
+
+/** Sem updatedAt/deletedAt — nunca é atualizada nem apagada, correção é `retificaId` apontando pra original. */
+export interface Evolucao {
+  id: string
+  pacienteId: string
+  conteudo: string
+  retificaId: string | null
+  dataSessao: string
+  tipo: TipoEvolucao
+  motivoRetificacao: string | null
+  createdAt: string
+}
+
+export interface CriarEvolucaoInput {
+  pacienteId: string
+  conteudo: string
+  dataSessao: string
+  tipo: TipoEvolucao
+}
+
+export interface RetificarEvolucaoInput {
+  retificaId: string
+  conteudo: string
+  dataSessao: string
+  tipo: TipoEvolucao
+  motivoRetificacao: string
+}
+
 const api = {
   app: {
     getVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion')
@@ -130,6 +159,13 @@ const api = {
     atualizar: (id: string, input: ResponsavelInput): Promise<IpcResult<{ responsavel: Responsavel }>> =>
       ipcRenderer.invoke('responsavel:atualizar', id, input),
     remover: (id: string): Promise<IpcResult> => ipcRenderer.invoke('responsavel:remover', id)
+  },
+  evolucao: {
+    criar: (input: CriarEvolucaoInput): Promise<IpcResult<{ evolucao: Evolucao }>> => ipcRenderer.invoke('evolucao:criar', input),
+    listar: (pacienteId: string): Promise<IpcResult<{ evolucoes: Evolucao[] }>> =>
+      ipcRenderer.invoke('evolucao:listar', pacienteId),
+    retificar: (input: RetificarEvolucaoInput): Promise<IpcResult<{ evolucao: Evolucao }>> =>
+      ipcRenderer.invoke('evolucao:retificar', input)
   }
 }
 

@@ -1,6 +1,7 @@
 import { app, BrowserWindow, powerMonitor, shell } from 'electron'
 import { join } from 'node:path'
 import { registerAppHandlers } from './ipc/app'
+import { registerEvolucaoHandlers } from './ipc/evolucao'
 import { registerPacientesHandlers } from './ipc/pacientes'
 import { registerVaultHandlers } from './ipc/vault'
 import { KeySession } from './crypto/session'
@@ -52,6 +53,7 @@ app.whenReady().then(() => {
   registerAppHandlers()
   registerVaultHandlers(session)
   registerPacientesHandlers()
+  registerEvolucaoHandlers()
   createWindow()
 
   // Poll de ociosidade do SO inteiro (CLAUDE.md invariante #6: 5 min sem

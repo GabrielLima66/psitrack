@@ -79,3 +79,32 @@ export interface ResponsavelInput {
   principal?: boolean
   pagador?: boolean
 }
+
+export type TipoEvolucao = 'sessao' | 'contato' | 'administrativo'
+
+/** Sem updatedAt/deletedAt — nunca é atualizada nem apagada, correção é `retificaId` apontando pra original. */
+export interface Evolucao {
+  id: string
+  pacienteId: string
+  conteudo: string
+  retificaId: string | null
+  dataSessao: string
+  tipo: TipoEvolucao
+  motivoRetificacao: string | null
+  createdAt: string
+}
+
+export interface CriarEvolucaoInput {
+  pacienteId: string
+  conteudo: string
+  dataSessao: string
+  tipo: TipoEvolucao
+}
+
+export interface RetificarEvolucaoInput {
+  retificaId: string
+  conteudo: string
+  dataSessao: string
+  tipo: TipoEvolucao
+  motivoRetificacao: string
+}

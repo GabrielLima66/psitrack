@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { MotivoEncerramento, OrigemPaciente, PacienteInput, StatusPaciente } from './types'
+import { EvolucaoSection } from './EvolucaoSection'
 import { formatarStatus } from './formatters'
 import { calcularIdade, isMenorDeIdade } from './idade'
 import { ResponsaveisSection } from './ResponsaveisSection'
@@ -159,6 +160,15 @@ export function PacienteFormScreen() {
           responsaveis={store.responsaveis}
           onCriar={store.criarResponsavel}
           onRemover={store.removerResponsavel}
+        />
+      )}
+
+      {existente && (
+        <EvolucaoSection
+          pacienteId={existente.id}
+          evolucoes={store.evolucoes}
+          onCriar={store.criarEvolucao}
+          onRetificar={store.retificarEvolucao}
         />
       )}
 
