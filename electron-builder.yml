@@ -22,6 +22,12 @@ files:
 # carregável como arquivo real em disco.
 asarUnpack:
   - '**/*.node'
+# Migrations do Drizzle são lidas via fs.readFileSync com caminho calculado
+# em runtime (electron/main/paths.ts) — invisível pro bundler estático do
+# Rollup, então precisam ser copiadas manualmente pro pacote final.
+extraResources:
+  - from: electron/main/db/migrations
+    to: migrations
 win:
   target: nsis
   artifactName: ${productName}-${version}-setup.${ext}

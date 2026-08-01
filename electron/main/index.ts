@@ -1,6 +1,11 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, powerMonitor, shell } from 'electron'
 import { join } from 'node:path'
 import { registerAppHandlers } from './ipc/app'
+import { registerVaultHandlers } from './ipc/vault'
+import { KeySession } from './crypto/session'
+import { startAutoLock } from './crypto/idle-lock'
+
+const session = new KeySession()
 
 // Nome explícito: define %APPDATA%/PsiTrack/ como diretório de userData,
 // independente de como o processo foi iniciado (dev via `electron .` ou empacotado).
@@ -44,7 +49,21 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   registerAppHandlers()
+  registerVaultHandlers(session)
   createWindow()
+
+  // Poll de ociosidade do SO inteiro (CLAUDE.md invariante #6: 5 min sem
+  // teclado/mouse), não listener de evento no renderer — mantém o zeramento
+  // da DEK inteiramente dentro do main (electron/main/crypto/idle-lock.ts).
+  startAutoLock({
+    getIdleSeconds: () => powerMonitor.getSystemIdleTime(),
+    onLock: () => {
+      session.lock()
+      for (const window of BrowserWindow.getAllWindows()) {
+        window.webContents.send('vault:locked')
+      }
+    }
+  })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

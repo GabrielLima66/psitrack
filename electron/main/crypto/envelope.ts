@@ -129,6 +129,38 @@ export async function changePassword(
   }
 }
 
+/**
+ * Rotaciona os dois envelopes (senha E recovery key) em torno da MESMA DEK
+ * recebida — não gera DEK nova, então o banco não precisa ser recifrado.
+ * Usado quando a usuária entra via recovery key (design da Etapa 5: ao
+ * recuperar o acesso, ela define uma senha nova e recebe uma chave de
+ * recuperação nova; a antiga deixa de valer). Diferente de `changePassword`,
+ * que não mexe na recovery key — aqui as duas são substituídas juntas.
+ */
+export async function rewrapKeysFile(
+  dek: Buffer,
+  newPassword: string,
+  params: Argon2Params = DEFAULT_ARGON2_PARAMS
+): Promise<{ keysFile: KeysFile; recoveryKey: Buffer }> {
+  const salt = randomBytes(SALT_LENGTH_BYTES)
+  const kek = await deriveKek(newPassword, salt, params)
+  const passwordBox = seal(kek, dek)
+  kek.fill(0)
+
+  const recoveryKey = generateRecoveryKey()
+  const recoveryBox = seal(recoveryKey, dek)
+
+  const keysFile: KeysFile = {
+    version: 1,
+    dek: {
+      password: { salt: salt.toString('base64'), kdf: params, ...toDTO(passwordBox) },
+      recovery: toDTO(recoveryBox)
+    }
+  }
+
+  return { keysFile, recoveryKey }
+}
+
 export function readKeysFile(filePath: string): KeysFile {
   return JSON.parse(readFileSync(filePath, 'utf-8')) as KeysFile
 }
