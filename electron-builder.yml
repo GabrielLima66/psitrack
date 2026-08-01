@@ -1,0 +1,34 @@
+appId: com.psitrack.desktop
+productName: PsiTrack
+copyright: PsiTrack
+directories:
+  output: release
+files:
+  - out/**/*
+  - package.json
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron/**/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!{.env,.env.*,.npmrc}'
+  - '!drizzle.config.ts'
+  - '!drizzle/**/*'
+  - '!scripts/**/*'
+  - '!vitest.config.ts'
+  - '!**/*.{ts,tsx}'
+  - '!**/*.test.*'
+# Módulo nativo (SQLCipher) não pode ficar dentro do asar — precisa ser
+# carregável como arquivo real em disco.
+asarUnpack:
+  - '**/*.node'
+win:
+  target: nsis
+  artifactName: ${productName}-${version}-setup.${ext}
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+# Sem publish configurado de propósito: o app não tem auto-update (invariante
+# "sem rede" do CLAUDE.md). Não adicionar bloco `publish`.
