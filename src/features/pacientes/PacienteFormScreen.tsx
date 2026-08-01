@@ -1,9 +1,12 @@
+import { Lock, NotebookText } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { MotivoEncerramento, OrigemPaciente, PacienteInput, StatusPaciente } from './types'
+import { AnotacoesPrivadasSection } from './AnotacoesPrivadasSection'
 import { EvolucaoSection } from './EvolucaoSection'
 import { formatarStatus } from './formatters'
 import { calcularIdade, isMenorDeIdade } from './idade'
@@ -164,12 +167,38 @@ export function PacienteFormScreen() {
       )}
 
       {existente && (
-        <EvolucaoSection
-          pacienteId={existente.id}
-          evolucoes={store.evolucoes}
-          onCriar={store.criarEvolucao}
-          onRetificar={store.retificarEvolucao}
-        />
+        // Abas separadas de propósito (SPEC-fase-1.md): evolução e anotação
+        // privada têm regime jurídico oposto (a paciente tem direito a uma,
+        // nunca à outra) — precisam ser distinguíveis à primeira vista, sem
+        // ler o texto. Ícone + cor (tokens warn-*) fazem essa distinção.
+        <Tabs defaultValue="evolucao">
+          <TabsList>
+            <TabsTrigger value="evolucao" className="gap-1.5">
+              <NotebookText className="size-4" />
+              Evolução clínica
+            </TabsTrigger>
+            <TabsTrigger value="anotacoes" className="gap-1.5 data-[state=active]:text-warn-foreground">
+              <Lock className="size-4" />
+              Anotações privadas
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="evolucao">
+            <EvolucaoSection
+              pacienteId={existente.id}
+              evolucoes={store.evolucoes}
+              onCriar={store.criarEvolucao}
+              onRetificar={store.retificarEvolucao}
+            />
+          </TabsContent>
+          <TabsContent value="anotacoes">
+            <AnotacoesPrivadasSection
+              anotacoes={store.anotacoes}
+              onCriar={store.criarAnotacao}
+              onAtualizar={store.atualizarAnotacao}
+              onExcluir={store.excluirAnotacao}
+            />
+          </TabsContent>
+        </Tabs>
       )}
 
       {existente && (

@@ -118,6 +118,26 @@ export interface RetificarEvolucaoInput {
   motivoRetificacao: string
 }
 
+/**
+ * NUNCA entra em export (CLAUDE.md invariante de dado #2 /
+ * electron/main/db/repositories/export.ts). Ao contrário de Evolucao: TEM
+ * updatedAt/deletedAt — edição e exclusão são livres aqui.
+ */
+export interface Anotacao {
+  id: string
+  pacienteId: string
+  titulo: string | null
+  conteudo: string
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export interface AnotacaoInput {
+  titulo?: string | null
+  conteudo: string
+}
+
 const api = {
   app: {
     getVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion')
@@ -166,6 +186,15 @@ const api = {
       ipcRenderer.invoke('evolucao:listar', pacienteId),
     retificar: (input: RetificarEvolucaoInput): Promise<IpcResult<{ evolucao: Evolucao }>> =>
       ipcRenderer.invoke('evolucao:retificar', input)
+  },
+  anotacao: {
+    listar: (pacienteId: string): Promise<IpcResult<{ anotacoes: Anotacao[] }>> =>
+      ipcRenderer.invoke('anotacao:listar', pacienteId),
+    criar: (pacienteId: string, input: AnotacaoInput): Promise<IpcResult<{ anotacao: Anotacao }>> =>
+      ipcRenderer.invoke('anotacao:criar', pacienteId, input),
+    atualizar: (id: string, input: AnotacaoInput): Promise<IpcResult<{ anotacao: Anotacao }>> =>
+      ipcRenderer.invoke('anotacao:atualizar', id, input),
+    excluir: (id: string): Promise<IpcResult> => ipcRenderer.invoke('anotacao:excluir', id)
   }
 }
 

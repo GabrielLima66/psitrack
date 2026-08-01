@@ -108,3 +108,19 @@ export interface RetificarEvolucaoInput {
   tipo: TipoEvolucao
   motivoRetificacao: string
 }
+
+/** NUNCA entra em export (CLAUDE.md invariante de dado #2). Ao contrário de Evolucao: edição e exclusão são livres. */
+export interface Anotacao {
+  id: string
+  pacienteId: string
+  titulo: string | null
+  conteudo: string
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export interface AnotacaoInput {
+  titulo?: string | null
+  conteudo: string
+}

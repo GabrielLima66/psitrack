@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import type {
   AlterarStatusInput,
+  Anotacao,
+  AnotacaoInput,
   CriarEvolucaoInput,
   Evolucao,
   ListarPacientesOptions,
@@ -27,6 +29,7 @@ interface PacientesStoreState {
   pacienteEmEdicao: Paciente | null // null = criando um novo
   responsaveis: Responsavel[]
   evolucoes: Evolucao[]
+  anotacoes: Anotacao[]
   formError: string | null
   formBusy: boolean
 
@@ -50,6 +53,10 @@ interface PacientesStoreState {
 
   criarEvolucao: (input: CriarEvolucaoInput) => Promise<boolean>
   retificarEvolucao: (input: RetificarEvolucaoInput) => Promise<boolean>
+
+  criarAnotacao: (input: AnotacaoInput) => Promise<void>
+  atualizarAnotacao: (id: string, input: AnotacaoInput) => Promise<void>
+  excluirAnotacao: (id: string) => Promise<void>
 }
 
 export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
@@ -65,6 +72,7 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
   pacienteEmEdicao: null,
   responsaveis: [],
   evolucoes: [],
+  anotacoes: [],
   formError: null,
   formBusy: false,
 
@@ -97,20 +105,22 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
   },
 
   abrirNovoPaciente: () =>
-    set({ screen: 'form', pacienteEmEdicao: null, responsaveis: [], evolucoes: [], formError: null }),
+    set({ screen: 'form', pacienteEmEdicao: null, responsaveis: [], evolucoes: [], anotacoes: [], formError: null }),
 
   abrirEdicaoPaciente: async (paciente) => {
-    set({ screen: 'form', pacienteEmEdicao: paciente, responsaveis: [], evolucoes: [], formError: null })
-    const [responsaveis, evolucoes] = await Promise.all([
+    set({ screen: 'form', pacienteEmEdicao: paciente, responsaveis: [], evolucoes: [], anotacoes: [], formError: null })
+    const [responsaveis, evolucoes, anotacoes] = await Promise.all([
       window.psitrack.responsavel.listar(paciente.id),
-      window.psitrack.evolucao.listar(paciente.id)
+      window.psitrack.evolucao.listar(paciente.id),
+      window.psitrack.anotacao.listar(paciente.id)
     ])
     if (responsaveis.ok) set({ responsaveis: responsaveis.responsaveis })
     if (evolucoes.ok) set({ evolucoes: evolucoes.evolucoes })
+    if (anotacoes.ok) set({ anotacoes: anotacoes.anotacoes })
   },
 
   voltarParaLista: () => {
-    set({ screen: 'lista', pacienteEmEdicao: null, responsaveis: [], evolucoes: [] })
+    set({ screen: 'lista', pacienteEmEdicao: null, responsaveis: [], evolucoes: [], anotacoes: [] })
     void get().carregarPacientes()
   },
 
@@ -208,5 +218,37 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
     const lista = await window.psitrack.evolucao.listar(paciente.id)
     if (lista.ok) set({ evolucoes: lista.evolucoes })
     return true
+  },
+
+  criarAnotacao: async (input) => {
+    const paciente = get().pacienteEmEdicao
+    if (!paciente) return
+    const result = await window.psitrack.anotacao.criar(paciente.id, input)
+    if (result.ok) {
+      const lista = await window.psitrack.anotacao.listar(paciente.id)
+      if (lista.ok) set({ anotacoes: lista.anotacoes })
+    } else {
+      set({ formError: result.error })
+    }
+  },
+
+  atualizarAnotacao: async (id, input) => {
+    const paciente = get().pacienteEmEdicao
+    if (!paciente) return
+    const result = await window.psitrack.anotacao.atualizar(id, input)
+    if (result.ok) {
+      const lista = await window.psitrack.anotacao.listar(paciente.id)
+      if (lista.ok) set({ anotacoes: lista.anotacoes })
+    } else {
+      set({ formError: result.error })
+    }
+  },
+
+  excluirAnotacao: async (id) => {
+    const paciente = get().pacienteEmEdicao
+    if (!paciente) return
+    await window.psitrack.anotacao.excluir(id)
+    const lista = await window.psitrack.anotacao.listar(paciente.id)
+    if (lista.ok) set({ anotacoes: lista.anotacoes })
   }
 }))
