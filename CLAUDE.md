@@ -139,5 +139,8 @@ npm run db:generate    # gera migração drizzle
 
 ## Fase atual
 
-**Fase 0 — fundação.** Só shell, banco cifrado, senha mestra, auto-lock e
-backup/restore verificado. Não crie tela de paciente, agenda ou financeiro ainda.
+**Fases 0, 1 e 2 concluídas** — fundação (shell, banco cifrado, senha mestra,
+auto-lock, backup/restore verificado), prontuário (cadastro, evolução
+append-only, anotação privada) e agenda/financeiro (horários fixos, cobrança,
+pagamento e recibo). Ver `SPEC-fase-1.md` e `SPEC-fase-2.md` pro detalhe de
+cada etapa. Próxima fase ainda não tem spec — não presuma escopo sem ela.
