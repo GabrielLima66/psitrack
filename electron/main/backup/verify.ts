@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3-multiple-ciphers'
+import { verificarBlobs, type BlobManifestEntry } from './blobs'
 
 function listTables(sqlite: Database.Database): string[] {
   const rows = sqlite
@@ -32,18 +33,22 @@ export interface VerificationResult {
   cipherIntegrityCheckOk: boolean
   rowCounts: Record<string, number>
   rowCountsMatchSource: boolean
+  blobs: { ok: boolean; problemas: string[] }
 }
 
 /**
  * Dois níveis de checagem, de propósito: `integrity_check` valida a
  * estrutura lógica do SQLite já decifrada; `cipher_integrity_check` valida
  * o HMAC por página do SQLCipher e pega corrupção na camada de cifra que o
- * primeiro não enxerga.
+ * primeiro não enxerga. `blobCheck` é opcional — call sites sem anexo pra
+ * conferir (ou de antes da Etapa 15) continuam funcionando sem passar nada,
+ * e `blobs.ok` fica `true` por não ter o que reprovar.
  */
 export function verifySnapshot(
   filePath: string,
   dek: Buffer,
-  sourceRowCounts: Record<string, number>
+  sourceRowCounts: Record<string, number>,
+  blobCheck?: { entries: BlobManifestEntry[]; blobsDir: string }
 ): VerificationResult {
   const sqlite = new Database(filePath)
   try {
@@ -52,13 +57,15 @@ export function verifySnapshot(
     const cipherProblems = sqlite.pragma('cipher_integrity_check') as unknown[]
     const rowCounts = getRowCounts(sqlite)
     const rowCountsMatchSource = rowCountsEqual(rowCounts, sourceRowCounts)
+    const blobs = blobCheck ? verificarBlobs(blobCheck.entries, blobCheck.blobsDir) : { ok: true, problemas: [] }
 
     return {
-      ok: integrityCheck === 'ok' && cipherProblems.length === 0 && rowCountsMatchSource,
+      ok: integrityCheck === 'ok' && cipherProblems.length === 0 && rowCountsMatchSource && blobs.ok,
       integrityCheck,
       cipherIntegrityCheckOk: cipherProblems.length === 0,
       rowCounts,
-      rowCountsMatchSource
+      rowCountsMatchSource,
+      blobs
     }
   } finally {
     sqlite.close()

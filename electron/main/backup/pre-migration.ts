@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { PsiTrackDatabase } from '../db/connection'
 import { readSchemaVersion, runMigrations } from '../db/migrate'
+import { copiarBlobs, listarBlobsParaManifesto } from './blobs'
 import { createSnapshot } from './snapshot'
 import { getRowCounts, getSchemaVersion, verifySnapshot } from './verify'
 
@@ -10,6 +11,8 @@ export interface MigrarComSegurancaOptions {
   dek: Buffer
   migrationsFolder: string
   backupDir: string
+  /** Pasta de anexos real da instalação — o snapshot de segurança passa a incluir os blobs também (SPEC-fase-3.md §4). */
+  anexosDir: string
 }
 
 function isDatabaseVazio(db: PsiTrackDatabase): boolean {
@@ -27,7 +30,7 @@ function isDatabaseVazio(db: PsiTrackDatabase): boolean {
  * falhar (disco cheio, por exemplo) — a exceção sobe e `runMigrations`
  * nunca é chamado: o banco original fica intocado.
  */
-export function migrarComSeguranca({ db, dek, migrationsFolder, backupDir }: MigrarComSegurancaOptions): void {
+export function migrarComSeguranca({ db, dek, migrationsFolder, backupDir, anexosDir }: MigrarComSegurancaOptions): void {
   const versaoAlvo = readSchemaVersion(migrationsFolder)
 
   if (!isDatabaseVazio(db)) {
@@ -35,10 +38,15 @@ export function migrarComSeguranca({ db, dek, migrationsFolder, backupDir }: Mig
     if (versaoAtual < versaoAlvo) {
       mkdirSync(backupDir, { recursive: true })
       const sourceRowCounts = getRowCounts(db.$client)
-      const snapshotPath = join(backupDir, `pre-migration-v${versaoAlvo}-${Date.now()}.db`)
+      const timestamp = Date.now()
+      const snapshotPath = join(backupDir, `pre-migration-v${versaoAlvo}-${timestamp}.db`)
+      const blobsDestDir = join(backupDir, `pre-migration-v${versaoAlvo}-${timestamp}-anexos`)
 
       createSnapshot(db, snapshotPath)
-      const verification = verifySnapshot(snapshotPath, dek, sourceRowCounts)
+      const blobEntries = listarBlobsParaManifesto(db)
+      copiarBlobs(anexosDir, blobsDestDir, blobEntries)
+
+      const verification = verifySnapshot(snapshotPath, dek, sourceRowCounts, { entries: blobEntries, blobsDir: blobsDestDir })
       if (!verification.ok) {
         throw new Error(
           `Snapshot de segurança pré-migração falhou na verificação (${snapshotPath}). Migração abortada, banco original intacto.`

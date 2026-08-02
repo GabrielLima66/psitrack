@@ -1,5 +1,7 @@
-import { copyFileSync } from 'node:fs'
+import { copyFileSync, mkdirSync } from 'node:fs'
+import { join } from 'node:path'
 import { readSchemaVersion } from '../db/migrate'
+import { verificarBlobs } from './blobs'
 import type { BackupManifest } from './manifest'
 
 /**
@@ -24,15 +26,33 @@ export interface RestoreBackupOptions {
   currentMigrationsFolder: string
   targetDbPath: string
   targetKeysFilePath: string
+  /** Pasta de blobs DENTRO do snapshot (gerada por `runBackup`/`migrarComSeguranca`). */
+  blobsSourceDir: string
+  /** Pasta de anexos real de destino — normalmente `getAnexosDir()` da instalação atual. */
+  targetAnexosDir: string
 }
 
 /**
- * Só a mecânica de copiar os arquivos depois do gate de versão passar —
- * decisão de UX (confirmação, snapshot de segurança do banco atual antes
- * de sobrescrever) fica pra quando a tela de restore for construída.
+ * Gate de versão + blobs batendo com o manifesto ANTES de copiar qualquer
+ * coisa — um snapshot com blob ausente/corrompido é recusado inteiro, sem
+ * tocar no estado atual (mesmo raciocínio do gate de versão: checagem
+ * sempre antes do primeiro `copyFileSync`). Decisão de UX (confirmação,
+ * snapshot de segurança do estado atual antes de sobrescrever) fica pra
+ * quando a tela de restore for construída (Etapa 17).
  */
 export function restoreBackup(options: RestoreBackupOptions): void {
   assertRestorable(options.manifest, options.currentMigrationsFolder)
+
+  const verificacaoBlobs = verificarBlobs(options.manifest.blobs.entries, options.blobsSourceDir)
+  if (!verificacaoBlobs.ok) {
+    throw new Error(`Blobs do snapshot não batem com o manifesto, restauração recusada: ${verificacaoBlobs.problemas.join('; ')}`)
+  }
+
   copyFileSync(options.snapshotPath, options.targetDbPath)
   copyFileSync(options.keysFilePath, options.targetKeysFilePath)
+
+  mkdirSync(options.targetAnexosDir, { recursive: true })
+  for (const entrada of options.manifest.blobs.entries) {
+    copyFileSync(join(options.blobsSourceDir, `${entrada.id}.enc`), join(options.targetAnexosDir, `${entrada.id}.enc`))
+  }
 }

@@ -1,11 +1,13 @@
 import { randomBytes } from 'node:crypto'
-import { cpSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { salvarAnexo } from '../anexos/anexoStore'
 import { openDatabase, type PsiTrackDatabase } from '../db/connection'
 import { readSchemaVersion, runMigrations } from '../db/migrate'
+import { criarPaciente } from '../db/repositories/pacientes'
 import { createTempDbPath } from '../db/test-support'
 
 const MIGRATIONS_FOLDER = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'db', 'migrations')
@@ -58,7 +60,7 @@ describe('migrarComSeguranca', () => {
     const dek = randomBytes(32)
 
     db = openDatabase({ filePath: temp.filePath, dek })
-    migrarComSeguranca({ db, dek, migrationsFolder: MIGRATIONS_FOLDER, backupDir: temp.dir })
+    migrarComSeguranca({ db, dek, migrationsFolder: MIGRATIONS_FOLDER, backupDir: temp.dir, anexosDir: join(temp.dir, 'anexos') })
 
     const arquivosDeSnapshot = readdirSync(temp.dir).filter((f) => f.startsWith('pre-migration-'))
     expect(arquivosDeSnapshot).toHaveLength(0)
@@ -76,13 +78,42 @@ describe('migrarComSeguranca', () => {
 
     const pastaComExtra = criarPastaMigrationsComExtra() // "app" entende uma versão a mais
     db = openDatabase({ filePath: temp.filePath, dek })
-    migrarComSeguranca({ db, dek, migrationsFolder: pastaComExtra, backupDir: temp.dir })
+    migrarComSeguranca({ db, dek, migrationsFolder: pastaComExtra, backupDir: temp.dir, anexosDir: join(temp.dir, 'anexos') })
 
     const arquivosDeSnapshot = readdirSync(temp.dir).filter(
       (f) => f.startsWith(`pre-migration-v${VERSAO_COM_EXTRA}-`) && f.endsWith('.db')
     )
     expect(arquivosDeSnapshot).toHaveLength(1)
     expect(existeTabela(db, 'dummy_test')).toBe(true) // migration pendente foi mesmo aplicada
+  })
+
+  it('snapshot pré-migração de banco com anexo inclui o blob (SPEC-fase-3.md)', async () => {
+    const { migrarComSeguranca } = await import('./pre-migration')
+    const temp = createTempDbPath()
+    cleanup = temp.cleanup
+    const dek = randomBytes(32)
+    const anexosDir = mkdtempSync(join(tmpdir(), 'psitrack-anexos-'))
+
+    db = openDatabase({ filePath: temp.filePath, dek })
+    runMigrations(db, MIGRATIONS_FOLDER)
+    const pacienteId = criarPaciente(db, { nome: 'Paciente Teste' }).id
+    const anexo = salvarAnexo(db, anexosDir, dek, Buffer.from('laudo em pdf'), {
+      pacienteId,
+      classificacao: 'prontuario',
+      nomeOriginal: 'laudo.pdf',
+      mime: 'application/pdf'
+    })
+    db.$client.close()
+
+    const pastaComExtra = criarPastaMigrationsComExtra()
+    db = openDatabase({ filePath: temp.filePath, dek })
+    migrarComSeguranca({ db, dek, migrationsFolder: pastaComExtra, backupDir: temp.dir, anexosDir })
+
+    const [pastaDeAnexos] = readdirSync(temp.dir).filter(
+      (f) => f.startsWith(`pre-migration-v${VERSAO_COM_EXTRA}-`) && f.endsWith('-anexos')
+    )
+    expect(pastaDeAnexos).toBeDefined()
+    expect(existsSync(join(temp.dir, pastaDeAnexos!, `${anexo.id}.enc`))).toBe(true)
   })
 
   it('verify falhando aborta a migração e deixa o banco original intacto', async () => {
@@ -95,7 +126,8 @@ describe('migrarComSeguranca', () => {
           integrityCheck: 'erro simulado',
           cipherIntegrityCheckOk: false,
           rowCounts: {},
-          rowCountsMatchSource: false
+          rowCountsMatchSource: false,
+          blobs: { ok: false, problemas: ['erro simulado'] }
         }))
       }
     })
@@ -113,7 +145,7 @@ describe('migrarComSeguranca', () => {
     db = openDatabase({ filePath: temp.filePath, dek })
 
     expect(() =>
-      migrarComSeguranca({ db: db!, dek, migrationsFolder: pastaComExtra, backupDir: temp.dir })
+      migrarComSeguranca({ db: db!, dek, migrationsFolder: pastaComExtra, backupDir: temp.dir, anexosDir: join(temp.dir, 'anexos') })
     ).toThrow(/verificação/i)
 
     expect(existeTabela(db, 'dummy_test')).toBe(false) // migração pendente nunca rodou
@@ -139,7 +171,7 @@ describe('migrarComSeguranca', () => {
     db = openDatabase({ filePath: temp.filePath, dek })
 
     expect(() =>
-      migrarComSeguranca({ db: db!, dek, migrationsFolder: pastaComExtra, backupDir: temp.dir })
+      migrarComSeguranca({ db: db!, dek, migrationsFolder: pastaComExtra, backupDir: temp.dir, anexosDir: join(temp.dir, 'anexos') })
     ).toThrow(/ENOSPC/)
 
     expect(existeTabela(db, 'dummy_test')).toBe(false)

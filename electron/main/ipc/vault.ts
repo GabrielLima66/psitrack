@@ -12,7 +12,7 @@ import { decodeRecoveryKey, encodeRecoveryKey, formatRecoveryKeyForDisplay } fro
 import type { KeySession } from '../crypto/session'
 import { openDatabase, type PsiTrackDatabase } from '../db/connection'
 import { materializarTodasRecorrencias } from '../db/repositories/sessao'
-import { getBackupsDir, getDbPath, getKeysFilePath, getMigrationsFolder } from '../paths'
+import { getAnexosDir, getBackupsDir, getDbPath, getKeysFilePath, getMigrationsFolder } from '../paths'
 import { migrarComSeguranca } from '../backup/pre-migration'
 import { safely } from './result'
 
@@ -28,7 +28,7 @@ function openAndMigrate(dek: Buffer): void {
   db = openDatabase({ filePath: getDbPath(), dek })
   // migrarComSeguranca (Etapa 9) só faz snapshot+verify quando há migration
   // pendente num banco já existente — banco novo/já atualizado passa direto.
-  migrarComSeguranca({ db, dek, migrationsFolder: getMigrationsFolder(), backupDir: getBackupsDir() })
+  migrarComSeguranca({ db, dek, migrationsFolder: getMigrationsFolder(), backupDir: getBackupsDir(), anexosDir: getAnexosDir() })
   // "Materialização de 12 semanas na abertura do app" (SPEC-fase-2.md
   // Etapa 11) — idempotente, estende cada recorrência ativa sem duplicar.
   materializarTodasRecorrencias(db)

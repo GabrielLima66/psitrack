@@ -1,10 +1,12 @@
 import { readFileSync, writeFileSync } from 'node:fs'
+import type { BlobManifestEntry } from './blobs'
 import type { VerificationResult } from './verify'
 
 export interface BackupManifest {
   createdAt: string // ISO-8601 UTC
   schemaVersion: number
   verification: VerificationResult
+  blobs: { entries: BlobManifestEntry[]; total: number }
 }
 
 export function writeManifest(filePath: string, manifest: BackupManifest): void {

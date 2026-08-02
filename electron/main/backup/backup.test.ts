@@ -1,15 +1,19 @@
 import { randomBytes } from 'node:crypto'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, unlinkSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
+import { salvarAnexo } from '../anexos/anexoStore'
+import { createKeysFile, writeKeysFile } from '../crypto/envelope'
 import { openDatabase, type PsiTrackDatabase } from '../db/connection'
 import { readSchemaVersion, runMigrations } from '../db/migrate'
+import { criarPaciente } from '../db/repositories/pacientes'
 import { pacientes, prontuarioEvolucao } from '../db/schema'
 import { createTempDbPath } from '../db/test-support'
 import { uuidv7 } from '../db/uuidv7'
-import { createKeysFile, writeKeysFile } from '../crypto/envelope'
 import { runBackup } from './backup'
+import { verificarBlobs } from './blobs'
 
 const MIGRATIONS_FOLDER = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'db', 'migrations')
 
@@ -48,6 +52,10 @@ function seedSourceDb(dek: Buffer, dir: string): PsiTrackDatabase {
   return db
 }
 
+function pastaVazia(): string {
+  return mkdtempSync(join(tmpdir(), 'psitrack-anexos-'))
+}
+
 describe('runBackup', () => {
   it('ciclo backup -> reabrir o snapshot preserva contagens de todas as tabelas', async () => {
     const temp = createTempDbPath()
@@ -66,7 +74,9 @@ describe('runBackup', () => {
       snapshotPath,
       keysFilePath,
       keysFileDestPath: join(temp.dir, 'backup-keys.json'),
-      manifestPath: join(temp.dir, 'manifest.json')
+      manifestPath: join(temp.dir, 'manifest.json'),
+      anexosDir: pastaVazia(),
+      blobsDestDir: join(temp.dir, 'backup-anexos')
     })
 
     expect(manifest.verification.ok).toBe(true)
@@ -74,6 +84,7 @@ describe('runBackup', () => {
     expect(manifest.verification.cipherIntegrityCheckOk).toBe(true)
     expect(manifest.verification.rowCountsMatchSource).toBe(true)
     expect(manifest.schemaVersion).toBe(readSchemaVersion(MIGRATIONS_FOLDER)) // não hardcoda o nº de migrations — muda a cada fase
+    expect(manifest.blobs.total).toBe(0)
 
     const restored = openDatabase({ filePath: snapshotPath, dek })
     openDbs.push(restored)
@@ -98,7 +109,9 @@ describe('runBackup', () => {
       snapshotPath: join(temp.dir, 'backup.db'),
       keysFilePath,
       keysFileDestPath,
-      manifestPath: join(temp.dir, 'manifest.json')
+      manifestPath: join(temp.dir, 'manifest.json'),
+      anexosDir: pastaVazia(),
+      blobsDestDir: join(temp.dir, 'backup-anexos')
     })
 
     expect(readFileSync(keysFileDestPath, 'utf-8')).toBe(readFileSync(keysFilePath, 'utf-8'))
@@ -121,10 +134,88 @@ describe('runBackup', () => {
       snapshotPath,
       keysFilePath,
       keysFileDestPath: join(temp.dir, 'backup-keys.json'),
-      manifestPath: join(temp.dir, 'manifest.json')
+      manifestPath: join(temp.dir, 'manifest.json'),
+      anexosDir: pastaVazia(),
+      blobsDestDir: join(temp.dir, 'backup-anexos')
     })
 
     expect(existsSync(`${snapshotPath}.tmp`)).toBe(false)
     expect(existsSync(snapshotPath)).toBe(true)
+  })
+
+  it('banco com 5 anexos produz manifesto com 5 entradas e 5 arquivos (SPEC-fase-3.md)', async () => {
+    const temp = createTempDbPath()
+    cleanup = temp.cleanup
+    const dek = randomBytes(32)
+    const db = seedSourceDb(dek, temp.dir)
+    const pacienteId = criarPaciente(db, { nome: 'Outro Paciente' }).id
+    const anexosDir = pastaVazia()
+
+    for (let i = 0; i < 5; i++) {
+      salvarAnexo(db, anexosDir, dek, Buffer.from(`conteúdo do anexo ${i}`), {
+        pacienteId,
+        classificacao: 'prontuario',
+        nomeOriginal: `documento-${i}.pdf`,
+        mime: 'application/pdf'
+      })
+    }
+
+    const { keysFile } = await createKeysFile('senha-teste')
+    const keysFilePath = join(temp.dir, 'keys.json')
+    writeKeysFile(keysFilePath, keysFile)
+    const blobsDestDir = join(temp.dir, 'backup-anexos')
+
+    const manifest = runBackup({
+      db,
+      dek,
+      snapshotPath: join(temp.dir, 'backup.db'),
+      keysFilePath,
+      keysFileDestPath: join(temp.dir, 'backup-keys.json'),
+      manifestPath: join(temp.dir, 'manifest.json'),
+      anexosDir,
+      blobsDestDir
+    })
+
+    expect(manifest.blobs.total).toBe(5)
+    expect(manifest.blobs.entries).toHaveLength(5)
+    expect(readdirSync(blobsDestDir)).toHaveLength(5)
+  })
+
+  it('remover um blob do backup faz a verificação de blobs falhar apontando qual', async () => {
+    const temp = createTempDbPath()
+    cleanup = temp.cleanup
+    const dek = randomBytes(32)
+    const db = seedSourceDb(dek, temp.dir)
+    const pacienteId = criarPaciente(db, { nome: 'Paciente Com Anexo' }).id
+    const anexosDir = pastaVazia()
+    const anexo = salvarAnexo(db, anexosDir, dek, Buffer.from('laudo importante'), {
+      pacienteId,
+      classificacao: 'prontuario',
+      nomeOriginal: 'laudo.pdf',
+      mime: 'application/pdf'
+    })
+
+    const { keysFile } = await createKeysFile('senha-teste')
+    const keysFilePath = join(temp.dir, 'keys.json')
+    writeKeysFile(keysFilePath, keysFile)
+    const blobsDestDir = join(temp.dir, 'backup-anexos')
+
+    const manifest = runBackup({
+      db,
+      dek,
+      snapshotPath: join(temp.dir, 'backup.db'),
+      keysFilePath,
+      keysFileDestPath: join(temp.dir, 'backup-keys.json'),
+      manifestPath: join(temp.dir, 'manifest.json'),
+      anexosDir,
+      blobsDestDir
+    })
+    expect(manifest.verification.blobs.ok).toBe(true)
+
+    unlinkSync(join(blobsDestDir, `${anexo.id}.enc`))
+
+    const reVerificacao = verificarBlobs(manifest.blobs.entries, blobsDestDir)
+    expect(reVerificacao.ok).toBe(false)
+    expect(reVerificacao.problemas[0]).toContain(anexo.id)
   })
 })
