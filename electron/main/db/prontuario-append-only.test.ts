@@ -73,6 +73,19 @@ describe('trigger append-only de prontuario_evolucao', () => {
     ).toThrow()
   })
 
+  // Regressão pós-migration 0003: idem, agora pra sessao_id (adicionada
+  // nesta migration pra ligar evolução à sessão da agenda).
+  it('rejeita UPDATE que mexe só na coluna nova (sessao_id)', () => {
+    const id = uuidv7()
+    db.insert(prontuarioEvolucao)
+      .values({ id, pacienteId, conteudo: 'evolução original', dataSessao: '2026-01-15', createdAt: new Date().toISOString() })
+      .run()
+
+    expect(() =>
+      db.update(prontuarioEvolucao).set({ sessaoId: uuidv7() }).where(eq(prontuarioEvolucao.id, id)).run()
+    ).toThrow()
+  })
+
   it('correção via nova linha com retifica_id funciona normalmente', () => {
     const originalId = uuidv7()
     db.insert(prontuarioEvolucao)

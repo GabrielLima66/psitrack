@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { openDatabase, type PsiTrackDatabase } from '../db/connection'
-import { runMigrations } from '../db/migrate'
+import { readSchemaVersion, runMigrations } from '../db/migrate'
 import { pacientes, prontuarioEvolucao } from '../db/schema'
 import { createTempDbPath } from '../db/test-support'
 import { uuidv7 } from '../db/uuidv7'
@@ -73,7 +73,7 @@ describe('runBackup', () => {
     expect(manifest.verification.integrityCheck).toBe('ok')
     expect(manifest.verification.cipherIntegrityCheckOk).toBe(true)
     expect(manifest.verification.rowCountsMatchSource).toBe(true)
-    expect(manifest.schemaVersion).toBe(3) // três migrations em electron/main/db/migrations
+    expect(manifest.schemaVersion).toBe(readSchemaVersion(MIGRATIONS_FOLDER)) // não hardcoda o nº de migrations — muda a cada fase
 
     const restored = openDatabase({ filePath: snapshotPath, dek })
     openDbs.push(restored)

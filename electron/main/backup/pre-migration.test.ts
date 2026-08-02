@@ -5,24 +5,27 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { openDatabase, type PsiTrackDatabase } from '../db/connection'
-import { runMigrations } from '../db/migrate'
+import { readSchemaVersion, runMigrations } from '../db/migrate'
 import { createTempDbPath } from '../db/test-support'
 
 const MIGRATIONS_FOLDER = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'db', 'migrations')
+const VERSAO_REAL = readSchemaVersion(MIGRATIONS_FOLDER)
+const VERSAO_COM_EXTRA = VERSAO_REAL + 1
 
 /**
- * Clona a pasta de migrations real e adiciona uma 4ª migration dummy —
+ * Clona a pasta de migrations real e adiciona mais uma migration dummy —
  * simula "o app entende uma versão que o banco ainda não tem" sem depender
- * de uma migration 003 real existir ainda.
+ * de qual seja a migration mais nova de verdade (esse número muda a cada fase).
  */
 function criarPastaMigrationsComExtra(): string {
   const dir = mkdtempSync(join(tmpdir(), 'psitrack-migrations-extra-'))
   cpSync(MIGRATIONS_FOLDER, dir, { recursive: true })
-  writeFileSync(join(dir, '0003_dummy_test.sql'), 'CREATE TABLE dummy_test (id text primary key);')
+  const tag = `${String(VERSAO_REAL).padStart(4, '0')}_dummy_test`
+  writeFileSync(join(dir, `${tag}.sql`), 'CREATE TABLE dummy_test (id text primary key);')
 
   const journalPath = join(dir, 'meta', '_journal.json')
   const journal = JSON.parse(readFileSync(journalPath, 'utf-8')) as { entries: unknown[] }
-  journal.entries.push({ idx: journal.entries.length, version: '6', when: Date.now(), tag: '0003_dummy_test', breakpoints: true })
+  journal.entries.push({ idx: journal.entries.length, version: '6', when: Date.now(), tag, breakpoints: true })
   writeFileSync(journalPath, JSON.stringify(journal, null, 2))
 
   return dir
@@ -68,14 +71,16 @@ describe('migrarComSeguranca', () => {
     const dek = randomBytes(32)
 
     db = openDatabase({ filePath: temp.filePath, dek })
-    runMigrations(db, MIGRATIONS_FOLDER) // leva o banco pra v3 (estado real da Fase 1)
+    runMigrations(db, MIGRATIONS_FOLDER) // leva o banco pra versão real atual
     db.$client.close()
 
-    const pastaComExtra = criarPastaMigrationsComExtra() // "app" entende v4
+    const pastaComExtra = criarPastaMigrationsComExtra() // "app" entende uma versão a mais
     db = openDatabase({ filePath: temp.filePath, dek })
     migrarComSeguranca({ db, dek, migrationsFolder: pastaComExtra, backupDir: temp.dir })
 
-    const arquivosDeSnapshot = readdirSync(temp.dir).filter((f) => f.startsWith('pre-migration-v4-') && f.endsWith('.db'))
+    const arquivosDeSnapshot = readdirSync(temp.dir).filter(
+      (f) => f.startsWith(`pre-migration-v${VERSAO_COM_EXTRA}-`) && f.endsWith('.db')
+    )
     expect(arquivosDeSnapshot).toHaveLength(1)
     expect(existeTabela(db, 'dummy_test')).toBe(true) // migration pendente foi mesmo aplicada
   })

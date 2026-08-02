@@ -83,6 +83,7 @@ export const prontuarioEvolucao = sqliteTable('prontuario_evolucao', {
   dataSessao: text('data_sessao').notNull(), // 'YYYY-MM-DD'
   tipo: text('tipo').notNull().default('sessao').$type<'sessao' | 'contato' | 'administrativo'>(),
   motivoRetificacao: text('motivo_retificacao'), // obrigatório na app quando retificaId != null
+  sessaoId: text('sessao_id').references((): AnySQLiteColumn => sessao.id), // preenchido só no insert (SPEC-fase-2.md D17) — tabela é append-only, vínculo retroativo é impossível sem relaxar a trigger
   createdAt: text('created_at').notNull()
 })
 
@@ -99,6 +100,150 @@ export const anotacaoPrivada = sqliteTable('anotacao_privada', {
     .references(() => pacientes.id),
   titulo: text('titulo'),
   conteudo: text('conteudo').notNull(),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  deletedAt: text('deleted_at')
+})
+
+/**
+ * N por paciente — dois ou mais horários fixos na semana é caso normal, não
+ * exceção (SPEC-fase-2.md §4.1). `horaLocal` é hora em America/Sao_Paulo,
+ * convertida pra UTC só na materialização da `sessao` (D14) — Brasil não
+ * tem horário de verão hoje; se voltar, basta regerar o horizonte.
+ */
+export const recorrencia = sqliteTable('recorrencia', {
+  id: text('id').primaryKey(),
+  pacienteId: text('paciente_id')
+    .notNull()
+    .references(() => pacientes.id),
+  diaSemana: integer('dia_semana').notNull(), // 0=dom … 6=sáb
+  horaLocal: text('hora_local').notNull(), // 'HH:MM' em America/Sao_Paulo
+  duracaoMin: integer('duracao_min').notNull().default(50),
+  modalidade: text('modalidade').notNull().$type<'presencial' | 'online'>(),
+  vigenciaInicio: text('vigencia_inicio').notNull(), // 'YYYY-MM-DD'
+  vigenciaFim: text('vigencia_fim'), // null = ativa
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  deletedAt: text('deleted_at')
+})
+
+/**
+ * Materializada (D13): ocorrência concreta, não regra virtual + exceção.
+ * Exceção (falta, cancelamento, encaixe) vira edição desta linha, nunca
+ * cálculo em runtime. `observacao` é logística ("pediu pra entrar pelos
+ * fundos") — se for clínico, é evolução (mesmo raciocínio do D2 da Fase 1).
+ */
+export const sessao = sqliteTable(
+  'sessao',
+  {
+    id: text('id').primaryKey(),
+    pacienteId: text('paciente_id')
+      .notNull()
+      .references(() => pacientes.id),
+    recorrenciaId: text('recorrencia_id').references(() => recorrencia.id),
+    inicioUtc: text('inicio_utc').notNull(), // ISO-8601 UTC
+    duracaoMin: integer('duracao_min').notNull(),
+    modalidade: text('modalidade').notNull().$type<'presencial' | 'online'>(),
+    status: text('status')
+      .notNull()
+      .default('agendada')
+      .$type<'agendada' | 'realizada' | 'remarcada' | 'cancelada_profissional' | 'falta_sem_aviso' | 'falta_com_aviso'>(),
+    statusAlteradoEm: text('status_alterado_em'),
+    avisadaEm: text('avisada_em'), // pra calcular aviso prévio de falta
+    motivo: text('motivo'),
+    remarcadaParaId: text('remarcada_para_id').references((): AnySQLiteColumn => sessao.id), // encaixe: aponta pra sessão nova
+    observacao: text('observacao'), // logística, NUNCA clínico
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+    deletedAt: text('deleted_at')
+  },
+  (t) => [
+    index('idx_sessao_agenda').on(t.inicioUtc, t.deletedAt),
+    index('idx_sessao_paciente').on(t.pacienteId, t.inicioUtc)
+  ]
+)
+
+/**
+ * Só `vigenciaInicio` — sem coluna de fim (D11). O fim é derivado da
+ * vigência seguinte na consulta (ver precoVigenteEm), o que elimina por
+ * construção sobreposição e buraco de vigência. Reajuste é linha nova;
+ * nenhum UPDATE em histórico (I3). Encerrar contrato é linha com
+ * `modalidade = 'encerrado'` e `valorCentavos` null (D12).
+ */
+export const contratoPreco = sqliteTable(
+  'contrato_preco',
+  {
+    id: text('id').primaryKey(),
+    pacienteId: text('paciente_id')
+      .notNull()
+      .references(() => pacientes.id),
+    modalidade: text('modalidade').notNull().$type<'avulso' | 'mensal' | 'encerrado'>(),
+    valorCentavos: integer('valor_centavos'), // POR SESSÃO. null quando 'encerrado'
+    politicaFalta: text('politica_falta')
+      .notNull()
+      .default('cobra_sem_aviso')
+      .$type<'cobra_sempre' | 'cobra_sem_aviso' | 'nunca_cobra'>(),
+    avisoMinimoHoras: integer('aviso_minimo_horas').notNull().default(24),
+    vigenciaInicio: text('vigencia_inicio').notNull(), // 'YYYY-MM-DD'
+    observacao: text('observacao'), // "valor social", "acordo até dez"
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+    deletedAt: text('deleted_at')
+  },
+  (t) => [index('idx_contrato_vigencia').on(t.pacienteId, t.vigenciaInicio)]
+)
+
+/**
+ * `sessaoUnico` é a proteção estrutural contra cobrança duplicada (D15/§2.1)
+ * — retificar uma evolução não pode gerar um segundo lançamento pra mesma
+ * sessão. `competencia` é armazenada, não derivada em consulta: a sessão
+ * está em UTC e a virada do mês é local (sessão de 31/01 23:00 local é
+ * competência 2025-01, não 2025-02 — ver calcularCompetencia).
+ */
+export const lancamento = sqliteTable(
+  'lancamento',
+  {
+    id: text('id').primaryKey(),
+    pacienteId: text('paciente_id')
+      .notNull()
+      .references(() => pacientes.id),
+    sessaoId: text('sessao_id').references(() => sessao.id), // null em ajuste/desconto
+    competencia: text('competencia').notNull(), // 'YYYY-MM' da data LOCAL da sessão
+    tipo: text('tipo').notNull().$type<'sessao' | 'falta' | 'ajuste' | 'desconto'>(),
+    descricao: text('descricao').notNull(),
+    valorCentavos: integer('valor_centavos').notNull(), // pode ser negativo (desconto)
+    status: text('status').notNull().default('pendente').$type<'pendente' | 'pago' | 'cancelado'>(),
+    pagamentoId: text('pagamento_id').references((): AnySQLiteColumn => pagamento.id),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+    deletedAt: text('deleted_at')
+  },
+  (t) => [
+    uniqueIndex('idx_lancamento_sessao')
+      .on(t.sessaoId)
+      .where(sql`${t.sessaoId} is not null and ${t.deletedAt} is null`),
+    index('idx_lancamento_pendentes').on(t.pacienteId, t.status, t.competencia)
+  ]
+)
+
+/**
+ * `pagadorNome`/`pagadorCpf` são snapshot, não FK: se o responsável pagador
+ * mudar depois, o recibo já emitido continua refletindo quem pagou de
+ * verdade. `reciboReferencia` é registro de emissão feita fora do app, não
+ * emissão de verdade (D18) — Receita Saúde não tem API de terceiros (I8).
+ */
+export const pagamento = sqliteTable('pagamento', {
+  id: text('id').primaryKey(),
+  pacienteId: text('paciente_id')
+    .notNull()
+    .references(() => pacientes.id),
+  valorCentavos: integer('valor_centavos').notNull(),
+  data: text('data').notNull(), // 'YYYY-MM-DD' — regime de caixa
+  meio: text('meio').notNull().$type<'pix' | 'dinheiro' | 'transferencia' | 'cartao' | 'outro'>(),
+  pagadorNome: text('pagador_nome').notNull(),
+  pagadorCpf: text('pagador_cpf'),
+  reciboEmitidoEm: text('recibo_emitido_em'),
+  reciboReferencia: text('recibo_referencia'), // número gerado pela Receita
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
   deletedAt: text('deleted_at')
