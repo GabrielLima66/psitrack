@@ -11,6 +11,8 @@ import type {
 } from '../agenda/types'
 import type {
   AlterarStatusInput,
+  Anexo,
+  AnexarViaDialogoInput,
   Anotacao,
   AnotacaoInput,
   CriarEvolucaoComSessaoRetroativaInput,
@@ -80,6 +82,20 @@ interface PacientesStoreState {
   atualizarAnotacao: (id: string, input: AnotacaoInput) => Promise<void>
   excluirAnotacao: (id: string) => Promise<void>
 
+  // Aba Documentos (Etapa 16): ativos e lixeira carregados juntos, mesmo
+  // padrão de carregarFinanceiro. `anexosError` é só pra falha real de IPC —
+  // diálogo cancelado pela usuária nunca vira erro.
+  anexos: Anexo[]
+  anexosLixeira: Anexo[]
+  anexosBusy: boolean
+  anexosError: string | null
+  carregarAnexos: () => Promise<void>
+  anexarDocumento: (input: AnexarViaDialogoInput) => Promise<boolean>
+  excluirAnexo: (id: string) => Promise<void>
+  restaurarAnexo: (id: string) => Promise<void>
+  lerAnexoParaPreview: (id: string) => Promise<{ bytes: Uint8Array; mime: string; nomeOriginal: string } | null>
+  salvarCopiaAnexo: (id: string) => Promise<void>
+
   // Atendimento (Etapa 11/D24): horários fixos + contrato inicial, só existem
   // como rascunho ENQUANTO o paciente ainda não foi salvo — depois de salvo,
   // viram `recorrenciasPaciente` (persistidas) e o contrato não é mais
@@ -134,6 +150,11 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
   formError: null,
   formBusy: false,
 
+  anexos: [],
+  anexosLixeira: [],
+  anexosBusy: false,
+  anexosError: null,
+
   recorrenciasRascunho: [],
   contratoRascunho: contratoRascunhoVazio(),
   recorrenciasPaciente: [],
@@ -182,6 +203,9 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
       responsaveis: [],
       evolucoes: [],
       anotacoes: [],
+      anexos: [],
+      anexosLixeira: [],
+      anexosError: null,
       formError: null,
       recorrenciasRascunho: [],
       contratoRascunho: contratoRascunhoVazio(),
@@ -201,6 +225,9 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
       responsaveis: [],
       evolucoes: [],
       anotacoes: [],
+      anexos: [],
+      anexosLixeira: [],
+      anexosError: null,
       formError: null,
       recorrenciasPaciente: [],
       prefillEvolucao: null,
@@ -221,10 +248,11 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
     if (anotacoes.ok) set({ anotacoes: anotacoes.anotacoes })
     if (recorrencias.ok) set({ recorrenciasPaciente: recorrencias.recorrencias })
     void get().carregarFinanceiro()
+    void get().carregarAnexos()
   },
 
   voltarParaLista: () => {
-    set({ screen: 'lista', pacienteEmEdicao: null, responsaveis: [], evolucoes: [], anotacoes: [] })
+    set({ screen: 'lista', pacienteEmEdicao: null, responsaveis: [], evolucoes: [], anotacoes: [], anexos: [], anexosLixeira: [] })
     void get().carregarPacientes()
   },
 
@@ -384,6 +412,73 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
     await window.psitrack.anotacao.excluir(id)
     const lista = await window.psitrack.anotacao.listar(paciente.id)
     if (lista.ok) set({ anotacoes: lista.anotacoes })
+  },
+
+  carregarAnexos: async () => {
+    const paciente = get().pacienteEmEdicao
+    if (!paciente) return
+    set({ anexosBusy: true, anexosError: null })
+    const [ativos, lixeira] = await Promise.all([
+      window.psitrack.anexo.listar(paciente.id),
+      window.psitrack.anexo.listar(paciente.id, { lixeira: true })
+    ])
+    set({
+      anexosBusy: false,
+      anexos: ativos.ok ? ativos.anexos : [],
+      anexosLixeira: lixeira.ok ? lixeira.anexos : [],
+      anexosError: !ativos.ok ? ativos.error : !lixeira.ok ? lixeira.error : null
+    })
+  },
+
+  anexarDocumento: async (input) => {
+    const paciente = get().pacienteEmEdicao
+    if (!paciente) return false
+    set({ anexosBusy: true, anexosError: null })
+    const result = await window.psitrack.anexo.anexarViaDialogo(paciente.id, input)
+    if (!result.ok) {
+      set({ anexosBusy: false, anexosError: result.error })
+      return false
+    }
+    if (result.cancelado) {
+      set({ anexosBusy: false })
+      return false
+    }
+    await get().carregarAnexos()
+    return true
+  },
+
+  excluirAnexo: async (id) => {
+    const result = await window.psitrack.anexo.excluir(id)
+    if (!result.ok) {
+      set({ anexosError: result.error })
+      return
+    }
+    await get().carregarAnexos()
+  },
+
+  restaurarAnexo: async (id) => {
+    const result = await window.psitrack.anexo.restaurar(id)
+    if (!result.ok) {
+      set({ anexosError: result.error })
+      return
+    }
+    await get().carregarAnexos()
+  },
+
+  lerAnexoParaPreview: async (id) => {
+    const result = await window.psitrack.anexo.ler(id)
+    if (!result.ok) {
+      set({ anexosError: result.error })
+      return null
+    }
+    return { bytes: result.bytes, mime: result.mime, nomeOriginal: result.nomeOriginal }
+  },
+
+  salvarCopiaAnexo: async (id) => {
+    const result = await window.psitrack.anexo.salvarCopia(id)
+    if (!result.ok) {
+      set({ anexosError: result.error })
+    }
   },
 
   adicionarRecorrenciaRascunho: (input) => set((state) => ({ recorrenciasRascunho: [...state.recorrenciasRascunho, input] })),

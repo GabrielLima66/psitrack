@@ -1,6 +1,7 @@
 import { app, BrowserWindow, powerMonitor, shell } from 'electron'
 import { join } from 'node:path'
 import { registerAgendaHandlers } from './ipc/agenda'
+import { registerAnexosHandlers } from './ipc/anexos'
 import { registerAnotacoesHandlers } from './ipc/anotacoes'
 import { registerAppHandlers } from './ipc/app'
 import { registerEvolucaoHandlers } from './ipc/evolucao'
@@ -60,6 +61,7 @@ app.whenReady().then(() => {
   registerAnotacoesHandlers()
   registerAgendaHandlers()
   registerFinanceiroHandlers()
+  registerAnexosHandlers(session)
   createWindow()
 
   // Poll de ociosidade do SO inteiro (CLAUDE.md invariante #6: 5 min sem

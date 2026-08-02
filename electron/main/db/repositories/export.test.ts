@@ -1,7 +1,10 @@
 import { randomBytes } from 'node:crypto'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { salvarAnexo } from '../../anexos/anexoStore'
 import { openDatabase, type PsiTrackDatabase } from '../connection'
 import { runMigrations } from '../migrate'
 import { createTempDbPath } from '../test-support'
@@ -17,6 +20,8 @@ const MARCADOR_EVOLUCAO = 'ZZ_EVOLUCAO_QUE_TEM_QUE_APARECER_NO_EXPORT_ZZ'
 let db: PsiTrackDatabase
 let cleanup: () => void
 let pacienteId: string
+let anexosDir: string
+let chaveMestra: Buffer
 
 beforeEach(() => {
   const temp = createTempDbPath()
@@ -24,6 +29,8 @@ beforeEach(() => {
   db = openDatabase({ filePath: temp.filePath, dek: randomBytes(32) })
   runMigrations(db, MIGRATIONS_FOLDER)
   pacienteId = criarPaciente(db, { nome: 'Paciente Teste' }).id
+  anexosDir = mkdtempSync(join(tmpdir(), 'psitrack-anexos-'))
+  chaveMestra = randomBytes(32)
 })
 
 afterEach(() => {
@@ -49,6 +56,34 @@ describe('coletarParaExport — invariante I2', () => {
 
     // Checagem estrutural: pega alguém adicionando uma chave nova (ex.: "anotacoes")
     // que aponte pra anotacao_privada no futuro, mesmo com dado de teste diferente.
-    expect(Object.keys(dados)).toEqual(['evolucao'])
+    expect(Object.keys(dados)).toEqual(['evolucao', 'anexos'])
+  })
+
+  it('inclui anexo classificado como prontuario (Etapa 16)', () => {
+    const anexo = salvarAnexo(db, anexosDir, chaveMestra, Buffer.from('laudo'), {
+      pacienteId,
+      classificacao: 'prontuario',
+      nomeOriginal: 'laudo.pdf',
+      mime: 'application/pdf'
+    })
+    const dados = coletarParaExport(db, pacienteId)
+    expect(dados.anexos.map((a) => a.id)).toContain(anexo.id)
+  })
+
+  it('NUNCA inclui anexo classificado como privado, nem por acidente de estrutura', () => {
+    // marcador na DESCRIÇÃO (metadado que de fato viaja no export) — não no
+    // conteúdo do arquivo, que nunca entra em `dados` de qualquer forma.
+    const anexoPrivado = salvarAnexo(db, anexosDir, chaveMestra, Buffer.from('conteúdo qualquer'), {
+      pacienteId,
+      classificacao: 'privado',
+      nomeOriginal: 'anotacao-pessoal.txt',
+      mime: 'text/plain',
+      descricao: MARCADOR_PRIVADO
+    })
+
+    const dados = coletarParaExport(db, pacienteId)
+
+    expect(dados.anexos.map((a) => a.id)).not.toContain(anexoPrivado.id)
+    expect(JSON.stringify(dados)).not.toContain(MARCADOR_PRIVADO)
   })
 })

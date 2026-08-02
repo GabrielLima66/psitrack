@@ -1,5 +1,6 @@
 import { writeFileSync } from 'node:fs'
-import { BrowserWindow, dialog, ipcMain } from 'electron'
+import { BrowserWindow, ipcMain } from 'electron'
+import { escolherDestinoParaSalvar } from '../anexos/dialogos'
 import { listarContratosPaciente, precoVigenteEm, type ContratoPrecoInput } from '../db/repositories/contratoPreco'
 import { reajustarContrato } from '../db/repositories/faturamento'
 import {
@@ -61,20 +62,20 @@ export function registerFinanceiroHandlers(): void {
   ipcMain.handle('relatorio:mensal', (_event, competencia: string) => safely(() => ({ relatorio: gerarRelatorioMensal(getDb(), competencia) })))
 
   // Export CSV local (I8 — sem rede): caminho escolhido pela usuária via diálogo nativo do SO.
+  // Usa o mesmo hook de diálogo dos anexos (Etapa 16) — sob PSITRACK_TEST_DIALOG_PATH
+  // o Playwright consegue dirigir este fluxo de ponta a ponta também.
   ipcMain.handle('relatorio:exportarCsv', async (event, competencia: string) =>
     safely(async () => {
       const relatorio = gerarRelatorioMensal(getDb(), competencia)
       const csv = gerarCsvRelatorio(relatorio)
       const janela = BrowserWindow.fromWebContents(event.sender)
-      const opcoes = {
+      const destino = await escolherDestinoParaSalvar(janela, `receita-saude-${competencia}.csv`, {
         title: 'Exportar relatório do mês',
-        defaultPath: `receita-saude-${competencia}.csv`,
         filters: [{ name: 'CSV', extensions: ['csv'] }]
-      }
-      const { canceled, filePath } = janela ? await dialog.showSaveDialog(janela, opcoes) : await dialog.showSaveDialog(opcoes)
-      if (canceled || !filePath) return { cancelado: true }
-      writeFileSync(filePath, csv, 'utf-8')
-      return { cancelado: false, caminho: filePath }
+      })
+      if (!destino) return { cancelado: true }
+      writeFileSync(destino, csv, 'utf-8')
+      return { cancelado: false, caminho: destino }
     })
   )
 }

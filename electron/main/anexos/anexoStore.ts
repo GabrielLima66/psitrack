@@ -1,6 +1,6 @@
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeSync } from 'node:fs'
 import { join } from 'node:path'
-import { and, eq, isNotNull, lte } from 'drizzle-orm'
+import { and, desc, eq, isNotNull, isNull, lte } from 'drizzle-orm'
 import { z } from 'zod'
 import type { PsiTrackDatabase } from '../db/connection'
 import { anexo } from '../db/schema'
@@ -30,10 +30,39 @@ export type SalvarAnexoInput = z.input<typeof salvarAnexoInputSchema>
 
 export type Anexo = typeof anexo.$inferSelect
 
-function obterAnexoOuFalhar(db: PsiTrackDatabase, id: string): Anexo {
+export function obterAnexoOuFalhar(db: PsiTrackDatabase, id: string): Anexo {
   const row = db.select().from(anexo).where(eq(anexo.id, id)).get()
   if (!row) throw new Error('Anexo não encontrado.')
   return row
+}
+
+export interface ListarAnexosOptions {
+  /** `true` = só a lixeira (soft-deletados); default/false = só os ativos. */
+  lixeira?: boolean
+}
+
+export function listarAnexosPaciente(db: PsiTrackDatabase, pacienteId: string, options: ListarAnexosOptions = {}): Anexo[] {
+  const condicaoDeletado = options.lixeira ? isNotNull(anexo.deletedAt) : isNull(anexo.deletedAt)
+  return db
+    .select()
+    .from(anexo)
+    .where(and(eq(anexo.pacienteId, pacienteId), condicaoDeletado))
+    .orderBy(desc(anexo.createdAt))
+    .all()
+}
+
+/** Soft delete — o blob nunca é apagado aqui (D32): só a purga, comando explícito, remove o arquivo. */
+export function excluirAnexo(db: PsiTrackDatabase, id: string): void {
+  obterAnexoOuFalhar(db, id)
+  db.update(anexo)
+    .set({ deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
+    .where(eq(anexo.id, id))
+    .run()
+}
+
+export function restaurarAnexo(db: PsiTrackDatabase, id: string): void {
+  obterAnexoOuFalhar(db, id)
+  db.update(anexo).set({ deletedAt: null, updatedAt: new Date().toISOString() }).where(eq(anexo.id, id)).run()
 }
 
 function caminhoBlob(anexosDir: string, id: string): string {

@@ -8,7 +8,7 @@ import { openDatabase, type PsiTrackDatabase } from '../db/connection'
 import { runMigrations } from '../db/migrate'
 import { criarPaciente } from '../db/repositories/pacientes'
 import { createTempDbPath } from '../db/test-support'
-import { lerAnexo, purgarAnexos, salvarAnexo, varrerOrfaos } from './anexoStore'
+import { excluirAnexo, lerAnexo, listarAnexosPaciente, purgarAnexos, restaurarAnexo, salvarAnexo, varrerOrfaos } from './anexoStore'
 
 const MIGRATIONS_FOLDER = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'db', 'migrations')
 
@@ -57,6 +57,25 @@ describe('salvarAnexo / lerAnexo', () => {
     const salvo = salvarAnexo(db, anexosDir, chaveMestra, bytes, inputPadrao())
     expect(salvo.tamanhoBytes).toBe(1000)
     expect(salvo.sha256Cifrado).toHaveLength(64)
+  })
+
+  it('ler pra visualização não cria nenhum arquivo fora da pasta de anexos (D28/I7)', () => {
+    const salvo = salvarAnexo(db, anexosDir, chaveMestra, Buffer.from('conteúdo do pdf'), inputPadrao())
+    // Diretório-sentinela isolado (só este teste sabe o nome dele) em vez de
+    // comparar `readdirSync(tmpdir())` inteiro: a suite roda arquivos de
+    // teste em paralelo, e vários outros (createTempDbPath, export.test.ts)
+    // criam/removem suas próprias pastas temp concorrentemente — comparar o
+    // tmpdir inteiro é flaky por design, não relacionado a este código.
+    const sentinelaDir = mkdtempSync(join(tmpdir(), 'psitrack-sentinela-'))
+    const antesAnexosDir = readdirSync(anexosDir)
+    const antesCwd = readdirSync(process.cwd())
+
+    lerAnexo(db, anexosDir, chaveMestra, salvo.id)
+    lerAnexo(db, anexosDir, chaveMestra, salvo.id) // duas vezes, como um preview reaberto
+
+    expect(readdirSync(anexosDir)).toEqual(antesAnexosDir)
+    expect(readdirSync(process.cwd())).toEqual(antesCwd)
+    expect(readdirSync(sentinelaDir)).toEqual([])
   })
 
   it('nome original nunca aparece em lugar nenhum do diretório de anexos', () => {
@@ -161,5 +180,45 @@ describe('purgarAnexos', () => {
   it('não toca anexo que nunca foi excluído', () => {
     salvarAnexo(db, anexosDir, chaveMestra, Buffer.from('x'), inputPadrao())
     expect(purgarAnexos(db, anexosDir, 30)).toHaveLength(0)
+  })
+})
+
+describe('listarAnexosPaciente / excluirAnexo / restaurarAnexo', () => {
+  it('lista só os ativos por padrão, mais recente primeiro', () => {
+    const a = salvarAnexo(db, anexosDir, chaveMestra, Buffer.from('a'), inputPadrao({ nomeOriginal: 'a.pdf' }))
+    const b = salvarAnexo(db, anexosDir, chaveMestra, Buffer.from('b'), inputPadrao({ nomeOriginal: 'b.pdf' }))
+
+    const lista = listarAnexosPaciente(db, pacienteId)
+    expect(lista.map((x) => x.id)).toEqual([b.id, a.id])
+  })
+
+  it('excluir (soft delete) tira da lista ativa, mas mantém o blob no disco', () => {
+    const a = salvarAnexo(db, anexosDir, chaveMestra, Buffer.from('a'), inputPadrao())
+    excluirAnexo(db, a.id)
+
+    expect(listarAnexosPaciente(db, pacienteId)).toHaveLength(0)
+    expect(listarAnexosPaciente(db, pacienteId, { lixeira: true }).map((x) => x.id)).toEqual([a.id])
+    expect(existsSync(join(anexosDir, `${a.id}.enc`))).toBe(true) // excluir mantém o blob (critério de aceite da Etapa 16)
+  })
+
+  it('restaurar devolve o anexo pra lista ativa', () => {
+    const a = salvarAnexo(db, anexosDir, chaveMestra, Buffer.from('a'), inputPadrao())
+    excluirAnexo(db, a.id)
+    restaurarAnexo(db, a.id)
+
+    expect(listarAnexosPaciente(db, pacienteId).map((x) => x.id)).toEqual([a.id])
+    expect(listarAnexosPaciente(db, pacienteId, { lixeira: true })).toHaveLength(0)
+  })
+
+  it('purgar depois de excluir remove o blob de verdade', () => {
+    const a = salvarAnexo(db, anexosDir, chaveMestra, Buffer.from('a'), inputPadrao())
+    excluirAnexo(db, a.id)
+    db.$client
+      .prepare('UPDATE anexo SET deleted_at = ? WHERE id = ?')
+      .run(new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString(), a.id)
+
+    const purgados = purgarAnexos(db, anexosDir, 30)
+    expect(purgados).toContain(a.id)
+    expect(existsSync(join(anexosDir, `${a.id}.enc`))).toBe(false)
   })
 })

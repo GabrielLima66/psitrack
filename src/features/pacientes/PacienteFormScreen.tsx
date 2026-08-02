@@ -1,4 +1,4 @@
-import { Lock, NotebookText, Wallet } from 'lucide-react'
+import { Lock, NotebookText, Paperclip, Wallet } from 'lucide-react'
 import { useState } from 'react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -10,6 +10,7 @@ import type { MotivoEncerramento, OrigemPaciente, PacienteInput, StatusPaciente 
 import { AnotacoesPrivadasSection } from './AnotacoesPrivadasSection'
 import { AtendimentoExistenteSection } from './AtendimentoExistenteSection'
 import { AtendimentoInicialSection } from './AtendimentoInicialSection'
+import { DocumentosSection } from './DocumentosSection'
 import { EvolucaoSection } from './EvolucaoSection'
 import { FinanceiroSection } from './FinanceiroSection'
 import { formatarStatus } from './formatters'
@@ -207,6 +208,10 @@ export function PacienteFormScreen() {
               <Wallet className="size-4" />
               Financeiro
             </TabsTrigger>
+            <TabsTrigger value="documentos" className="gap-1.5">
+              <Paperclip className="size-4" />
+              Documentos
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="evolucao">
             {store.pendenciaFinanceira && (
@@ -222,6 +227,7 @@ export function PacienteFormScreen() {
               onCriarComSessaoRetroativa={store.criarEvolucaoComSessaoRetroativa}
               prefill={store.prefillEvolucao}
               onPrefillConsumido={store.limparPrefillEvolucao}
+              onAnexarDocumento={(evolucaoId) => store.anexarDocumento({ classificacao: 'prontuario', evolucaoId })}
             />
           </TabsContent>
           <TabsContent value="anotacoes">
@@ -242,6 +248,19 @@ export function PacienteFormScreen() {
               onCriarAjuste={store.criarLancamentoAjuste}
               onCancelarLancamento={store.cancelarLancamento}
               onMarcarReciboEmitido={store.marcarReciboEmitido}
+            />
+          </TabsContent>
+          <TabsContent value="documentos">
+            <DocumentosSection
+              anexos={store.anexos}
+              anexosLixeira={store.anexosLixeira}
+              busy={store.anexosBusy}
+              error={store.anexosError}
+              onAnexar={store.anexarDocumento}
+              onExcluir={store.excluirAnexo}
+              onRestaurar={store.restaurarAnexo}
+              onLer={store.lerAnexoParaPreview}
+              onSalvarCopia={store.salvarCopiaAnexo}
             />
           </TabsContent>
         </Tabs>

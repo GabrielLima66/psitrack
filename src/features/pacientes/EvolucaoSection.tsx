@@ -17,6 +17,8 @@ interface EvolucaoSectionProps {
   /** Atalho "registrar evolução" clicado a partir de uma sessão na agenda (Etapa 11/D17). */
   prefill?: { sessaoId: string; dataSessao: string } | null
   onPrefillConsumido?: () => void
+  /** Anexo vinculado a uma entrada: força classificação prontuário (D33) — nunca oferece "privado" aqui. */
+  onAnexarDocumento: (evolucaoId: string) => Promise<boolean>
 }
 
 type Modo = 'fechado' | 'nova' | { retificando: string }
@@ -38,7 +40,8 @@ export function EvolucaoSection({
   onRetificar,
   onCriarComSessaoRetroativa,
   prefill,
-  onPrefillConsumido
+  onPrefillConsumido,
+  onAnexarDocumento
 }: EvolucaoSectionProps) {
   const [modo, setModo] = useState<Modo>('fechado')
   const [conteudo, setConteudo] = useState('')
@@ -49,6 +52,13 @@ export function EvolucaoSection({
   const [salvando, setSalvando] = useState(false)
   const [oferecendoSessaoRetroativa, setOferecendoSessaoRetroativa] = useState(false)
   const [horaSessaoRetroativa, setHoraSessaoRetroativa] = useState('14:00')
+  const [anexandoEntradaId, setAnexandoEntradaId] = useState<string | null>(null)
+
+  async function handleAnexarDocumento(entradaId: string): Promise<void> {
+    setAnexandoEntradaId(entradaId)
+    await onAnexarDocumento(entradaId)
+    setAnexandoEntradaId(null)
+  }
 
   useEffect(() => {
     if (!prefill || modo !== 'fechado') return
@@ -262,16 +272,23 @@ export function EvolucaoSection({
                 </p>
               )}
 
-              {!retificacao && modo === 'fechado' && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="self-start"
-                  onClick={() => abrirRetificacao(entrada)}
-                >
-                  Retificar
-                </Button>
+              {modo === 'fechado' && (
+                <div className="flex gap-1 self-start">
+                  {!retificacao && (
+                    <Button type="button" variant="ghost" size="sm" onClick={() => abrirRetificacao(entrada)}>
+                      Retificar
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={anexandoEntradaId === entrada.id}
+                    onClick={() => void handleAnexarDocumento(entrada.id)}
+                  >
+                    {anexandoEntradaId === entrada.id ? 'Anexando…' : 'Anexar documento'}
+                  </Button>
+                </div>
               )}
             </div>
           )

@@ -346,6 +346,42 @@ export interface RelatorioMensal {
   pagamentos: LinhaPagamentoRelatorio[]
 }
 
+export type ClassificacaoAnexo = 'prontuario' | 'privado'
+
+/**
+ * `nonce`/`chaveEnvelopada` são o ciphertext do envelope por arquivo (D25) —
+ * não a DEK mestra (essa nunca cruza IPC, invariante de segurança #1 do
+ * CLAUDE.md). Inúteis pra quem não tem a DEK, que só existe no main.
+ */
+export interface Anexo {
+  id: string
+  pacienteId: string
+  evolucaoId: string | null
+  classificacao: ClassificacaoAnexo
+  nomeOriginal: string
+  mime: string
+  tamanhoBytes: number
+  sha256Cifrado: string
+  nonce: string
+  chaveEnvelopada: string
+  descricao: string | null
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export interface ListarAnexosOptions {
+  /** `true` = só a lixeira (soft-deletados); default/false = só os ativos. */
+  lixeira?: boolean
+}
+
+/** `classificacao` força `'prontuario'` na UI quando `evolucaoId` é passado (D33). */
+export interface AnexarViaDialogoInput {
+  classificacao: ClassificacaoAnexo
+  evolucaoId?: string | null
+  descricao?: string | null
+}
+
 const api = {
   app: {
     getVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion')
@@ -464,6 +500,22 @@ const api = {
       ipcRenderer.invoke('relatorio:mensal', competencia),
     exportarCsv: (competencia: string): Promise<IpcResult<{ cancelado: boolean; caminho?: string }>> =>
       ipcRenderer.invoke('relatorio:exportarCsv', competencia)
+  },
+  anexo: {
+    listar: (pacienteId: string, options?: ListarAnexosOptions): Promise<IpcResult<{ anexos: Anexo[] }>> =>
+      ipcRenderer.invoke('anexo:listar', pacienteId, options),
+    anexarViaDialogo: (
+      pacienteId: string,
+      input: AnexarViaDialogoInput
+    ): Promise<IpcResult<{ cancelado: boolean; anexo?: Anexo }>> =>
+      ipcRenderer.invoke('anexo:anexarViaDialogo', pacienteId, input),
+    /** Decifrado em memória pelo main — nunca toca disco em claro (D28, I7). */
+    ler: (anexoId: string): Promise<IpcResult<{ bytes: Uint8Array; mime: string; nomeOriginal: string }>> =>
+      ipcRenderer.invoke('anexo:ler', anexoId),
+    salvarCopia: (anexoId: string): Promise<IpcResult<{ cancelado: boolean; caminho?: string }>> =>
+      ipcRenderer.invoke('anexo:salvarCopia', anexoId),
+    excluir: (id: string): Promise<IpcResult> => ipcRenderer.invoke('anexo:excluir', id),
+    restaurar: (id: string): Promise<IpcResult> => ipcRenderer.invoke('anexo:restaurar', id)
   }
 }
 
