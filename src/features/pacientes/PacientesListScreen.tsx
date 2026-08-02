@@ -24,7 +24,7 @@ export function PacientesListScreen() {
   }, [])
 
   return (
-    <div className="mx-auto flex h-screen max-w-5xl flex-col gap-6 p-8">
+    <div className="mx-auto flex h-full max-w-5xl flex-col gap-6 overflow-y-auto p-8">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-foreground">Pacientes</h1>
         <Button onClick={store.abrirNovoPaciente}>Novo paciente</Button>

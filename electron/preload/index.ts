@@ -108,6 +108,8 @@ export interface CriarEvolucaoInput {
   conteudo: string
   dataSessao: string
   tipo: TipoEvolucao
+  /** Preenchido pelo atalho "registrar evolução" clicado a partir da agenda (Etapa 11/D17). */
+  sessaoId?: string | null
 }
 
 export interface RetificarEvolucaoInput {
@@ -136,6 +138,109 @@ export interface Anotacao {
 export interface AnotacaoInput {
   titulo?: string | null
   conteudo: string
+}
+
+export type ModalidadeAtendimento = 'presencial' | 'online'
+
+/** N por paciente — dois ou mais horários fixos na semana é caso normal (SPEC-fase-2.md §4.1). */
+export interface Recorrencia {
+  id: string
+  pacienteId: string
+  diaSemana: number // 0=dom … 6=sáb
+  horaLocal: string // 'HH:MM' em America/Sao_Paulo
+  duracaoMin: number
+  modalidade: ModalidadeAtendimento
+  vigenciaInicio: string
+  vigenciaFim: string | null
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export interface RecorrenciaInput {
+  diaSemana: number
+  horaLocal: string
+  duracaoMin?: number
+  modalidade: ModalidadeAtendimento
+  vigenciaInicio: string
+}
+
+export type StatusSessao = 'agendada' | 'realizada' | 'remarcada' | 'cancelada_profissional' | 'falta_sem_aviso' | 'falta_com_aviso'
+
+/** Materializada (D13): ocorrência concreta, nunca regra virtual + exceção calculada em runtime. */
+export interface Sessao {
+  id: string
+  pacienteId: string
+  recorrenciaId: string | null
+  inicioUtc: string
+  duracaoMin: number
+  modalidade: ModalidadeAtendimento
+  status: StatusSessao
+  statusAlteradoEm: string | null
+  avisadaEm: string | null
+  motivo: string | null
+  remarcadaParaId: string | null
+  observacao: string | null // logística, NUNCA clínico
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export interface SessaoComPaciente extends Sessao {
+  pacienteNome: string
+}
+
+export interface CriarSessaoAvulsaInput {
+  pacienteId: string
+  dataLocal: string
+  horaLocal: string
+  duracaoMin?: number
+  modalidade: ModalidadeAtendimento
+  observacao?: string | null
+}
+
+export interface AlterarStatusSessaoInput {
+  status: StatusSessao
+  motivo?: string | null
+  avisadaEm?: string | null
+}
+
+export interface RemarcarSessaoInput {
+  dataLocal: string
+  horaLocal: string
+}
+
+export type PoliticaFalta = 'cobra_sempre' | 'cobra_sem_aviso' | 'nunca_cobra'
+export type ModalidadeContrato = 'avulso' | 'mensal' | 'encerrado'
+
+export interface ContratoPreco {
+  id: string
+  pacienteId: string
+  modalidade: ModalidadeContrato
+  valorCentavos: number | null // null quando 'encerrado'
+  politicaFalta: PoliticaFalta
+  avisoMinimoHoras: number
+  vigenciaInicio: string
+  observacao: string | null
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export interface ContratoPrecoInput {
+  modalidade: 'avulso' | 'mensal'
+  valorCentavos: number
+  politicaFalta?: PoliticaFalta
+  avisoMinimoHoras?: number
+  vigenciaInicio: string
+  observacao?: string | null
+}
+
+/** Paciente + N recorrências + contrato inicial, tudo numa transação (D24). */
+export interface CriarPacienteComAtendimentoInput {
+  paciente: PacienteInput
+  recorrencias: RecorrenciaInput[]
+  contrato: ContratoPrecoInput
 }
 
 const api = {
@@ -169,7 +274,9 @@ const api = {
     listar: (options?: ListarPacientesOptions): Promise<IpcResult<{ pacientes: PacienteComUltimaSessao[] }>> =>
       ipcRenderer.invoke('paciente:listar', options),
     arquivar: (id: string): Promise<IpcResult> => ipcRenderer.invoke('paciente:arquivar', id),
-    restaurar: (id: string): Promise<IpcResult> => ipcRenderer.invoke('paciente:restaurar', id)
+    restaurar: (id: string): Promise<IpcResult> => ipcRenderer.invoke('paciente:restaurar', id),
+    criarComAtendimento: (input: CriarPacienteComAtendimentoInput): Promise<IpcResult<{ paciente: Paciente }>> =>
+      ipcRenderer.invoke('paciente:criarComAtendimento', input)
   },
   responsavel: {
     listar: (pacienteId: string): Promise<IpcResult<{ responsaveis: Responsavel[] }>> =>
@@ -195,6 +302,26 @@ const api = {
     atualizar: (id: string, input: AnotacaoInput): Promise<IpcResult<{ anotacao: Anotacao }>> =>
       ipcRenderer.invoke('anotacao:atualizar', id, input),
     excluir: (id: string): Promise<IpcResult> => ipcRenderer.invoke('anotacao:excluir', id)
+  },
+  recorrencia: {
+    listar: (pacienteId: string): Promise<IpcResult<{ recorrencias: Recorrencia[] }>> =>
+      ipcRenderer.invoke('recorrencia:listar', pacienteId),
+    criar: (pacienteId: string, input: RecorrenciaInput): Promise<IpcResult<{ recorrencia: Recorrencia }>> =>
+      ipcRenderer.invoke('recorrencia:criar', pacienteId, input),
+    encerrar: (id: string, vigenciaFim: string): Promise<IpcResult<{ recorrencia: Recorrencia }>> =>
+      ipcRenderer.invoke('recorrencia:encerrar', id, vigenciaFim)
+  },
+  sessao: {
+    listarPeriodo: (inicioUtc: string, fimUtc: string): Promise<IpcResult<{ sessoes: SessaoComPaciente[] }>> =>
+      ipcRenderer.invoke('sessao:listarPeriodo', inicioUtc, fimUtc),
+    criarAvulsa: (input: CriarSessaoAvulsaInput): Promise<IpcResult<{ sessao: Sessao }>> =>
+      ipcRenderer.invoke('sessao:criarAvulsa', input),
+    alterarStatus: (id: string, input: AlterarStatusSessaoInput): Promise<IpcResult<{ sessao: Sessao }>> =>
+      ipcRenderer.invoke('sessao:alterarStatus', id, input),
+    remarcar: (id: string, input: RemarcarSessaoInput): Promise<IpcResult<{ origem: Sessao; destino: Sessao }>> =>
+      ipcRenderer.invoke('sessao:remarcar', id, input),
+    sobreposicao: (inicioUtc: string, duracaoMin: number, excludingId?: string): Promise<IpcResult<{ colisoes: SessaoComPaciente[] }>> =>
+      ipcRenderer.invoke('sessao:sobreposicao', inicioUtc, duracaoMin, excludingId)
   }
 }
 

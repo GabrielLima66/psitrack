@@ -8,7 +8,7 @@ import { contratoPreco } from '../schema'
 import { createTempDbPath } from '../test-support'
 import { uuidv7 } from '../uuidv7'
 import { criarPaciente } from './pacientes'
-import { precoVigenteEm } from './contratoPreco'
+import { criarContratoPreco, precoVigenteEm } from './contratoPreco'
 
 const MIGRATIONS_FOLDER = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'migrations')
 
@@ -98,5 +98,30 @@ describe('precoVigenteEm', () => {
     const reaberto = precoVigenteEm(db, pacienteId, '2026-10-01')
     expect(reaberto?.modalidade).toBe('mensal')
     expect(reaberto?.valorCentavos).toBe(20000)
+  })
+})
+
+describe('criarContratoPreco', () => {
+  it('cria contrato com valores default de política e aviso mínimo', () => {
+    const contrato = criarContratoPreco(db, pacienteId, {
+      modalidade: 'avulso',
+      valorCentavos: 15000,
+      vigenciaInicio: '2026-01-01'
+    })
+    expect(contrato.politicaFalta).toBe('cobra_sem_aviso')
+    expect(contrato.avisoMinimoHoras).toBe(24)
+    expect(precoVigenteEm(db, pacienteId, '2026-02-01')?.valorCentavos).toBe(15000)
+  })
+
+  it('rejeita valor não-positivo', () => {
+    expect(() =>
+      criarContratoPreco(db, pacienteId, { modalidade: 'avulso', valorCentavos: 0, vigenciaInicio: '2026-01-01' })
+    ).toThrow()
+  })
+
+  it('rejeita valor float', () => {
+    expect(() =>
+      criarContratoPreco(db, pacienteId, { modalidade: 'avulso', valorCentavos: 150.5, vigenciaInicio: '2026-01-01' })
+    ).toThrow()
   })
 })

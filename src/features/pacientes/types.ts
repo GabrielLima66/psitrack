@@ -99,6 +99,8 @@ export interface CriarEvolucaoInput {
   conteudo: string
   dataSessao: string
   tipo: TipoEvolucao
+  /** Preenchido pelo atalho "registrar evolução" clicado a partir da agenda (Etapa 11/D17). */
+  sessaoId?: string | null
 }
 
 export interface RetificarEvolucaoInput {

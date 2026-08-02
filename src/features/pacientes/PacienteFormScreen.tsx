@@ -7,6 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { MotivoEncerramento, OrigemPaciente, PacienteInput, StatusPaciente } from './types'
 import { AnotacoesPrivadasSection } from './AnotacoesPrivadasSection'
+import { AtendimentoExistenteSection } from './AtendimentoExistenteSection'
+import { AtendimentoInicialSection } from './AtendimentoInicialSection'
 import { EvolucaoSection } from './EvolucaoSection'
 import { formatarStatus } from './formatters'
 import { calcularIdade, isMenorDeIdade } from './idade'
@@ -63,7 +65,7 @@ export function PacienteFormScreen() {
   }
 
   return (
-    <div className="mx-auto flex h-screen max-w-3xl flex-col gap-6 overflow-y-auto p-8">
+    <div className="mx-auto flex h-full max-w-3xl flex-col gap-6 overflow-y-auto p-8">
       <button
         type="button"
         onClick={store.voltarParaLista}
@@ -154,6 +156,24 @@ export function PacienteFormScreen() {
         </Button>
       </form>
 
+      {!existente && (
+        <AtendimentoInicialSection
+          recorrencias={store.recorrenciasRascunho}
+          onAdicionar={store.adicionarRecorrenciaRascunho}
+          onRemover={store.removerRecorrenciaRascunho}
+          contrato={store.contratoRascunho}
+          onContratoChange={store.setContratoRascunho}
+        />
+      )}
+
+      {existente && (
+        <AtendimentoExistenteSection
+          recorrencias={store.recorrenciasPaciente}
+          onAdicionar={store.adicionarRecorrenciaExistente}
+          onEncerrar={store.encerrarRecorrenciaExistente}
+        />
+      )}
+
       {menor && !existente && (
         <p className="text-sm text-muted-foreground">Salve o cadastro para poder adicionar responsáveis legais.</p>
       )}
@@ -188,6 +208,8 @@ export function PacienteFormScreen() {
               evolucoes={store.evolucoes}
               onCriar={store.criarEvolucao}
               onRetificar={store.retificarEvolucao}
+              prefill={store.prefillEvolucao}
+              onPrefillConsumido={store.limparPrefillEvolucao}
             />
           </TabsContent>
           <TabsContent value="anotacoes">

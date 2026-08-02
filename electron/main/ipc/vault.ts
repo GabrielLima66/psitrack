@@ -11,6 +11,7 @@ import {
 import { decodeRecoveryKey, encodeRecoveryKey, formatRecoveryKeyForDisplay } from '../crypto/recovery-key'
 import type { KeySession } from '../crypto/session'
 import { openDatabase, type PsiTrackDatabase } from '../db/connection'
+import { materializarTodasRecorrencias } from '../db/repositories/sessao'
 import { getBackupsDir, getDbPath, getKeysFilePath, getMigrationsFolder } from '../paths'
 import { migrarComSeguranca } from '../backup/pre-migration'
 import { safely } from './result'
@@ -28,6 +29,9 @@ function openAndMigrate(dek: Buffer): void {
   // migrarComSeguranca (Etapa 9) só faz snapshot+verify quando há migration
   // pendente num banco já existente — banco novo/já atualizado passa direto.
   migrarComSeguranca({ db, dek, migrationsFolder: getMigrationsFolder(), backupDir: getBackupsDir() })
+  // "Materialização de 12 semanas na abertura do app" (SPEC-fase-2.md
+  // Etapa 11) — idempotente, estende cada recorrência ativa sem duplicar.
+  materializarTodasRecorrencias(db)
 }
 
 /** Handlers do domínio "vault": senha mestra, recovery key, auto-lock. */

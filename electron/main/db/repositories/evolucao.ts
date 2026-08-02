@@ -12,7 +12,11 @@ export const criarEvolucaoSchema = z.object({
   pacienteId: z.string().min(1),
   conteudo: z.string().trim().min(1, 'O conteúdo não pode ficar vazio.'),
   dataSessao: dataSessaoSchema,
-  tipo: z.enum(TIPO_VALUES).default('sessao')
+  tipo: z.enum(TIPO_VALUES).default('sessao'),
+  // Preenchido só no insert (D17/SPEC-fase-2.md) — a tabela é append-only,
+  // então não existe caminho pra ligar uma evolução já gravada a uma sessão
+  // depois. Vem do atalho "registrar evolução" clicado a partir da agenda.
+  sessaoId: z.string().min(1).nullish()
 })
 export type CriarEvolucaoInput = z.infer<typeof criarEvolucaoSchema>
 
@@ -53,6 +57,7 @@ export function criarEvolucao(db: PsiTrackDatabase, input: CriarEvolucaoInput): 
       conteudo: parsed.conteudo,
       dataSessao: parsed.dataSessao,
       tipo: parsed.tipo,
+      sessaoId: parsed.sessaoId ?? null,
       createdAt: new Date().toISOString()
     })
     .run()

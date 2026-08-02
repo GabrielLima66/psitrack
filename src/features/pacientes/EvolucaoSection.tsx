@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -12,6 +12,9 @@ interface EvolucaoSectionProps {
   evolucoes: Evolucao[]
   onCriar: (input: CriarEvolucaoInput) => Promise<boolean>
   onRetificar: (input: RetificarEvolucaoInput) => Promise<boolean>
+  /** Atalho "registrar evolução" clicado a partir de uma sessão na agenda (Etapa 11/D17). */
+  prefill?: { sessaoId: string; dataSessao: string } | null
+  onPrefillConsumido?: () => void
 }
 
 type Modo = 'fechado' | 'nova' | { retificando: string }
@@ -26,13 +29,25 @@ function hoje(): string {
  * retificação NUNCA esconde o original; as duas linhas ficam visíveis, uma
  * apontando pra outra pela data (SPEC-fase-1.md, regra de exibição crítica).
  */
-export function EvolucaoSection({ pacienteId, evolucoes, onCriar, onRetificar }: EvolucaoSectionProps) {
+export function EvolucaoSection({ pacienteId, evolucoes, onCriar, onRetificar, prefill, onPrefillConsumido }: EvolucaoSectionProps) {
   const [modo, setModo] = useState<Modo>('fechado')
   const [conteudo, setConteudo] = useState('')
   const [dataSessao, setDataSessao] = useState(hoje())
   const [tipo, setTipo] = useState<TipoEvolucao>('sessao')
   const [motivoRetificacao, setMotivoRetificacao] = useState('')
+  const [sessaoIdAtual, setSessaoIdAtual] = useState<string | null>(null)
   const [salvando, setSalvando] = useState(false)
+
+  useEffect(() => {
+    if (!prefill || modo !== 'fechado') return
+    setConteudo('')
+    setDataSessao(prefill.dataSessao)
+    setTipo('sessao')
+    setSessaoIdAtual(prefill.sessaoId)
+    setModo('nova')
+    onPrefillConsumido?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill])
 
   const porId = new Map(evolucoes.map((entrada) => [entrada.id, entrada]))
   const retificadaPor = new Map<string, Evolucao>()
@@ -44,6 +59,7 @@ export function EvolucaoSection({ pacienteId, evolucoes, onCriar, onRetificar }:
     setConteudo('')
     setDataSessao(hoje())
     setTipo('sessao')
+    setSessaoIdAtual(null)
     setModo('nova')
   }
 
@@ -52,6 +68,7 @@ export function EvolucaoSection({ pacienteId, evolucoes, onCriar, onRetificar }:
     setDataSessao(original.dataSessao)
     setTipo(original.tipo)
     setMotivoRetificacao('')
+    setSessaoIdAtual(null)
     setModo({ retificando: original.id })
   }
 
@@ -60,7 +77,7 @@ export function EvolucaoSection({ pacienteId, evolucoes, onCriar, onRetificar }:
     const ok =
       typeof modo === 'object'
         ? await onRetificar({ retificaId: modo.retificando, conteudo, dataSessao, tipo, motivoRetificacao })
-        : await onCriar({ pacienteId, conteudo, dataSessao, tipo })
+        : await onCriar({ pacienteId, conteudo, dataSessao, tipo, sessaoId: sessaoIdAtual })
     setSalvando(false)
     if (ok) setModo('fechado')
   }
@@ -85,6 +102,9 @@ export function EvolucaoSection({ pacienteId, evolucoes, onCriar, onRetificar }:
               Retificando a entrada de {formatarDataBr(retificandoOriginal.dataSessao)}. O texto original continua
               visível na timeline — isto grava uma entrada nova, nunca sobrescreve.
             </p>
+          )}
+          {sessaoIdAtual && (
+            <p className="text-[13px] text-muted-foreground">Vinculada à sessão da agenda selecionada.</p>
           )}
           <div className="grid grid-cols-2 gap-2">
             <div className="flex flex-col gap-1">
