@@ -21,12 +21,23 @@ function caminhoBlob(dir: string, id: string): string {
   return join(dir, `${id}.enc`)
 }
 
+function tabelaAnexoExiste(db: PsiTrackDatabase): boolean {
+  return db.$client.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'anexo'`).get() !== undefined
+}
+
 /**
  * TODAS as linhas, inclusive soft-deletadas — o blob físico só some de
  * verdade na purga (Etapa 14/D32). Backup espelha o que existe em disco
  * agora, não o que "deveria" existir segundo o estado lógico do prontuário.
+ *
+ * Chamada também pelo snapshot pré-migração (Etapa 9/15), que roda ANTES da
+ * migration ser aplicada — pra um banco que ainda está numa versão anterior
+ * à 0004 (Etapa 14), a tabela `anexo` simplesmente ainda não existe. Sem essa
+ * checagem, `db.select().from(anexo)` explode com "no such table: anexo" e
+ * a migração nunca chega a rodar, travando o desbloqueio pra sempre.
  */
 export function listarBlobsParaManifesto(db: PsiTrackDatabase): BlobManifestEntry[] {
+  if (!tabelaAnexoExiste(db)) return []
   return db
     .select({ id: anexo.id, sha256Cifrado: anexo.sha256Cifrado, tamanhoBytes: anexo.tamanhoBytes })
     .from(anexo)

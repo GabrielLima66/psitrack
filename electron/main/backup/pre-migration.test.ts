@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -37,6 +37,29 @@ function existeTabela(db: PsiTrackDatabase, nome: string): boolean {
   return (
     db.$client.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`).get(nome) !== undefined
   )
+}
+
+/**
+ * Clona a pasta real de migrations, mas remove qualquer migration numerada
+ * >= 4 (a partir de que número, não importa — usa o mesmo truque genérico
+ * de migration-0003.test.ts) — simula "banco de antes da Etapa 14", quando
+ * a tabela `anexo` ainda não existia.
+ */
+function criarPastaSemAnexo(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'psitrack-sem-anexo-'))
+  cpSync(MIGRATIONS_FOLDER, dir, { recursive: true })
+
+  const numeroDaMigration = (nomeOuTag: string): number => Number(nomeOuTag.slice(0, 4))
+  for (const arquivo of readdirSync(dir)) {
+    if (arquivo.endsWith('.sql') && numeroDaMigration(arquivo) >= 4) rmSync(join(dir, arquivo))
+  }
+
+  const journalPath = join(dir, 'meta', '_journal.json')
+  const journal = JSON.parse(readFileSync(journalPath, 'utf-8')) as { entries: { tag: string }[] }
+  journal.entries = journal.entries.filter((entrada) => numeroDaMigration(entrada.tag) < 4)
+  writeFileSync(journalPath, JSON.stringify(journal, null, 2))
+
+  return dir
 }
 
 let cleanup: (() => void) | undefined
@@ -175,5 +198,29 @@ describe('migrarComSeguranca', () => {
     ).toThrow(/ENOSPC/)
 
     expect(existeTabela(db, 'dummy_test')).toBe(false)
+  })
+
+  it('banco de antes da Etapa 14 (sem tabela anexo) migra sem quebrar no snapshot pré-migração', async () => {
+    const { migrarComSeguranca } = await import('./pre-migration')
+    const temp = createTempDbPath()
+    cleanup = temp.cleanup
+    const dek = randomBytes(32)
+
+    const pastaSemAnexo = criarPastaSemAnexo()
+    db = openDatabase({ filePath: temp.filePath, dek })
+    runMigrations(db, pastaSemAnexo) // banco no estado pré-Etapa-14: tabela `anexo` não existe
+    expect(existeTabela(db, 'anexo')).toBe(false)
+    db.$client.close()
+
+    db = openDatabase({ filePath: temp.filePath, dek })
+    // `MIGRATIONS_FOLDER` (pasta real, com a migration do `anexo`) é o que o
+    // app entende hoje — antes do fix, `listarBlobsParaManifesto` explodia
+    // aqui com "no such table: anexo" porque tentava ler a tabela ANTES da
+    // migration que a cria, travando o desbloqueio pra sempre.
+    expect(() =>
+      migrarComSeguranca({ db: db!, dek, migrationsFolder: MIGRATIONS_FOLDER, backupDir: temp.dir, anexosDir: join(temp.dir, 'anexos') })
+    ).not.toThrow()
+
+    expect(existeTabela(db, 'anexo')).toBe(true)
   })
 })
