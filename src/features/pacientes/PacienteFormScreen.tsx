@@ -1,5 +1,6 @@
-import { Lock, NotebookText } from 'lucide-react'
+import { Lock, NotebookText, Wallet } from 'lucide-react'
 import { useState } from 'react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -10,6 +11,7 @@ import { AnotacoesPrivadasSection } from './AnotacoesPrivadasSection'
 import { AtendimentoExistenteSection } from './AtendimentoExistenteSection'
 import { AtendimentoInicialSection } from './AtendimentoInicialSection'
 import { EvolucaoSection } from './EvolucaoSection'
+import { FinanceiroSection } from './FinanceiroSection'
 import { formatarStatus } from './formatters'
 import { calcularIdade, isMenorDeIdade } from './idade'
 import { ResponsaveisSection } from './ResponsaveisSection'
@@ -201,13 +203,23 @@ export function PacienteFormScreen() {
               <Lock className="size-4" />
               Anotações privadas
             </TabsTrigger>
+            <TabsTrigger value="financeiro" className="gap-1.5">
+              <Wallet className="size-4" />
+              Financeiro
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="evolucao">
+            {store.pendenciaFinanceira && (
+              <Alert variant="warn" className="mb-3">
+                <AlertDescription>{store.pendenciaFinanceira}</AlertDescription>
+              </Alert>
+            )}
             <EvolucaoSection
               pacienteId={existente.id}
               evolucoes={store.evolucoes}
               onCriar={store.criarEvolucao}
               onRetificar={store.retificarEvolucao}
+              onCriarComSessaoRetroativa={store.criarEvolucaoComSessaoRetroativa}
               prefill={store.prefillEvolucao}
               onPrefillConsumido={store.limparPrefillEvolucao}
             />
@@ -218,6 +230,16 @@ export function PacienteFormScreen() {
               onCriar={store.criarAnotacao}
               onAtualizar={store.atualizarAnotacao}
               onExcluir={store.excluirAnotacao}
+            />
+          </TabsContent>
+          <TabsContent value="financeiro">
+            <FinanceiroSection
+              contratoVigente={store.contratoVigente}
+              historicoContratos={store.historicoContratos}
+              lancamentos={store.lancamentos}
+              onReajustar={store.reajustarContrato}
+              onCriarAjuste={store.criarLancamentoAjuste}
+              onCancelarLancamento={store.cancelarLancamento}
             />
           </TabsContent>
         </Tabs>

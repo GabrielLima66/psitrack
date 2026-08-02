@@ -5,13 +5,15 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { formatarDataBr, formatarDataHoraBr, formatarTipoEvolucao } from './formatters'
-import type { CriarEvolucaoInput, Evolucao, RetificarEvolucaoInput, TipoEvolucao } from './types'
+import type { CriarEvolucaoComSessaoRetroativaInput, CriarEvolucaoInput, Evolucao, RetificarEvolucaoInput, TipoEvolucao } from './types'
 
 interface EvolucaoSectionProps {
   pacienteId: string
   evolucoes: Evolucao[]
   onCriar: (input: CriarEvolucaoInput) => Promise<boolean>
   onRetificar: (input: RetificarEvolucaoInput) => Promise<boolean>
+  /** "Evolução avulsa sem sessão oferece criar a sessão retroativa" (Etapa 12). */
+  onCriarComSessaoRetroativa: (input: CriarEvolucaoComSessaoRetroativaInput) => Promise<boolean>
   /** Atalho "registrar evolução" clicado a partir de uma sessão na agenda (Etapa 11/D17). */
   prefill?: { sessaoId: string; dataSessao: string } | null
   onPrefillConsumido?: () => void
@@ -29,7 +31,15 @@ function hoje(): string {
  * retificação NUNCA esconde o original; as duas linhas ficam visíveis, uma
  * apontando pra outra pela data (SPEC-fase-1.md, regra de exibição crítica).
  */
-export function EvolucaoSection({ pacienteId, evolucoes, onCriar, onRetificar, prefill, onPrefillConsumido }: EvolucaoSectionProps) {
+export function EvolucaoSection({
+  pacienteId,
+  evolucoes,
+  onCriar,
+  onRetificar,
+  onCriarComSessaoRetroativa,
+  prefill,
+  onPrefillConsumido
+}: EvolucaoSectionProps) {
   const [modo, setModo] = useState<Modo>('fechado')
   const [conteudo, setConteudo] = useState('')
   const [dataSessao, setDataSessao] = useState(hoje())
@@ -37,6 +47,8 @@ export function EvolucaoSection({ pacienteId, evolucoes, onCriar, onRetificar, p
   const [motivoRetificacao, setMotivoRetificacao] = useState('')
   const [sessaoIdAtual, setSessaoIdAtual] = useState<string | null>(null)
   const [salvando, setSalvando] = useState(false)
+  const [oferecendoSessaoRetroativa, setOferecendoSessaoRetroativa] = useState(false)
+  const [horaSessaoRetroativa, setHoraSessaoRetroativa] = useState('14:00')
 
   useEffect(() => {
     if (!prefill || modo !== 'fechado') return
@@ -60,6 +72,7 @@ export function EvolucaoSection({ pacienteId, evolucoes, onCriar, onRetificar, p
     setDataSessao(hoje())
     setTipo('sessao')
     setSessaoIdAtual(null)
+    setOferecendoSessaoRetroativa(false)
     setModo('nova')
   }
 
@@ -69,17 +82,51 @@ export function EvolucaoSection({ pacienteId, evolucoes, onCriar, onRetificar, p
     setTipo(original.tipo)
     setMotivoRetificacao('')
     setSessaoIdAtual(null)
+    setOferecendoSessaoRetroativa(false)
     setModo({ retificando: original.id })
   }
 
-  async function handleSalvar(): Promise<void> {
+  async function salvarDireto(): Promise<void> {
     setSalvando(true)
     const ok =
       typeof modo === 'object'
         ? await onRetificar({ retificaId: modo.retificando, conteudo, dataSessao, tipo, motivoRetificacao })
         : await onCriar({ pacienteId, conteudo, dataSessao, tipo, sessaoId: sessaoIdAtual })
     setSalvando(false)
-    if (ok) setModo('fechado')
+    if (ok) {
+      setModo('fechado')
+      setOferecendoSessaoRetroativa(false)
+    }
+  }
+
+  /** Entrada nova, tipo=sessao, sem sessão pré-selecionada: pergunta antes de gravar sem cobrança (critério de aceite da Etapa 12). */
+  async function handleSalvar(): Promise<void> {
+    if (modo === 'nova' && tipo === 'sessao' && !sessaoIdAtual) {
+      setOferecendoSessaoRetroativa(true)
+      return
+    }
+    await salvarDireto()
+  }
+
+  async function handleConfirmarSessaoRetroativa(): Promise<void> {
+    setSalvando(true)
+    const ok = await onCriarComSessaoRetroativa({
+      pacienteId,
+      dataLocal: dataSessao,
+      horaLocal: horaSessaoRetroativa,
+      modalidade: 'presencial',
+      conteudo
+    })
+    setSalvando(false)
+    if (ok) {
+      setModo('fechado')
+      setOferecendoSessaoRetroativa(false)
+    }
+  }
+
+  function handleRecusarSessaoRetroativa(): void {
+    setOferecendoSessaoRetroativa(false)
+    void salvarDireto()
   }
 
   const retificandoOriginal = typeof modo === 'object' ? porId.get(modo.retificando) : undefined
@@ -144,18 +191,44 @@ export function EvolucaoSection({ pacienteId, evolucoes, onCriar, onRetificar, p
               />
             </div>
           )}
-          <div className="flex gap-2 pt-1">
-            <Button
-              type="button"
-              disabled={salvando || !conteudo.trim() || (typeof modo === 'object' && !motivoRetificacao.trim())}
-              onClick={handleSalvar}
-            >
-              {salvando ? 'Salvando…' : 'Salvar'}
-            </Button>
-            <Button type="button" variant="outline" onClick={() => setModo('fechado')}>
-              Cancelar
-            </Button>
-          </div>
+          {oferecendoSessaoRetroativa ? (
+            <div className="flex flex-col gap-2 rounded-md border border-border bg-background p-3">
+              <p className="text-sm text-foreground">
+                Essa entrada é sobre uma sessão, mas não veio da agenda. Quer criar a sessão retroativa agora, pra
+                entrar no financeiro? Recusando, esta entrada nunca gera cobrança.
+              </p>
+              <div className="flex items-end gap-2">
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="evolucao-hora-retroativa">Hora da sessão</Label>
+                  <Input
+                    id="evolucao-hora-retroativa"
+                    type="time"
+                    value={horaSessaoRetroativa}
+                    onChange={(event) => setHoraSessaoRetroativa(event.target.value)}
+                  />
+                </div>
+                <Button type="button" disabled={salvando} onClick={handleConfirmarSessaoRetroativa}>
+                  Sim, criar sessão e salvar
+                </Button>
+                <Button type="button" variant="outline" disabled={salvando} onClick={handleRecusarSessaoRetroativa}>
+                  Não, salvar sem cobrança
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex gap-2 pt-1">
+              <Button
+                type="button"
+                disabled={salvando || !conteudo.trim() || (typeof modo === 'object' && !motivoRetificacao.trim())}
+                onClick={handleSalvar}
+              >
+                {salvando ? 'Salvando…' : 'Salvar'}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setModo('fechado')}>
+                Cancelar
+              </Button>
+            </div>
+          )}
         </div>
       )}
 

@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { formatarDataCurta, formatarDiaSemanaAbrev } from './formatters'
 import { NovaSessaoForm } from './NovaSessaoForm'
@@ -62,6 +63,11 @@ export function AgendaScreen() {
       </div>
 
       {store.error && <p className="text-sm text-destructive">{store.error}</p>}
+      {store.pendenciaFinanceira && (
+        <Alert variant="warn">
+          <AlertDescription>{store.pendenciaFinanceira}</AlertDescription>
+        </Alert>
+      )}
 
       {store.visao === 'semana' ? (
         <div className="grid grid-cols-7 gap-2">

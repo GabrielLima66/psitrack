@@ -243,6 +243,47 @@ export interface CriarPacienteComAtendimentoInput {
   contrato: ContratoPrecoInput
 }
 
+export type TipoLancamento = 'sessao' | 'falta' | 'ajuste' | 'desconto'
+export type StatusLancamento = 'pendente' | 'pago' | 'cancelado'
+
+/** Gerado a partir de sessão (`sessaoId` preenchido) ou manual (ajuste/desconto, `sessaoId` null). Valor congelado na criação (D21). */
+export interface Lancamento {
+  id: string
+  pacienteId: string
+  sessaoId: string | null
+  competencia: string // 'YYYY-MM' da data local da sessão
+  tipo: TipoLancamento
+  descricao: string
+  valorCentavos: number // pode ser negativo (desconto)
+  status: StatusLancamento
+  pagamentoId: string | null
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export interface LancamentoAjusteInput {
+  tipo: 'ajuste' | 'desconto'
+  valorCentavos: number
+  descricao: string
+  competencia: string
+}
+
+/** Devolvido por toda ação que pode gerar cobrança (mudar status, evolução) — nunca cobra como zero quando falta contrato (Etapa 12). */
+export interface ResultadoFaturamento {
+  lancamento: Lancamento | null
+  pendenciaSemContrato: boolean
+}
+
+export interface CriarEvolucaoComSessaoRetroativaInput {
+  pacienteId: string
+  dataLocal: string
+  horaLocal: string
+  duracaoMin?: number
+  modalidade: ModalidadeAtendimento
+  conteudo: string
+}
+
 const api = {
   app: {
     getVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion')
@@ -288,11 +329,16 @@ const api = {
     remover: (id: string): Promise<IpcResult> => ipcRenderer.invoke('responsavel:remover', id)
   },
   evolucao: {
-    criar: (input: CriarEvolucaoInput): Promise<IpcResult<{ evolucao: Evolucao }>> => ipcRenderer.invoke('evolucao:criar', input),
+    criar: (input: CriarEvolucaoInput): Promise<IpcResult<{ evolucao: Evolucao } & ResultadoFaturamento>> =>
+      ipcRenderer.invoke('evolucao:criar', input),
     listar: (pacienteId: string): Promise<IpcResult<{ evolucoes: Evolucao[] }>> =>
       ipcRenderer.invoke('evolucao:listar', pacienteId),
-    retificar: (input: RetificarEvolucaoInput): Promise<IpcResult<{ evolucao: Evolucao }>> =>
-      ipcRenderer.invoke('evolucao:retificar', input)
+    retificar: (input: RetificarEvolucaoInput): Promise<IpcResult<{ evolucao: Evolucao } & ResultadoFaturamento>> =>
+      ipcRenderer.invoke('evolucao:retificar', input),
+    criarComSessaoRetroativa: (
+      input: CriarEvolucaoComSessaoRetroativaInput
+    ): Promise<IpcResult<{ evolucao: Evolucao; sessao: Sessao } & ResultadoFaturamento>> =>
+      ipcRenderer.invoke('evolucao:criarComSessaoRetroativa', input)
   },
   anotacao: {
     listar: (pacienteId: string): Promise<IpcResult<{ anotacoes: Anotacao[] }>> =>
@@ -316,12 +362,30 @@ const api = {
       ipcRenderer.invoke('sessao:listarPeriodo', inicioUtc, fimUtc),
     criarAvulsa: (input: CriarSessaoAvulsaInput): Promise<IpcResult<{ sessao: Sessao }>> =>
       ipcRenderer.invoke('sessao:criarAvulsa', input),
-    alterarStatus: (id: string, input: AlterarStatusSessaoInput): Promise<IpcResult<{ sessao: Sessao }>> =>
+    alterarStatus: (id: string, input: AlterarStatusSessaoInput): Promise<IpcResult<{ sessao: Sessao } & ResultadoFaturamento>> =>
       ipcRenderer.invoke('sessao:alterarStatus', id, input),
     remarcar: (id: string, input: RemarcarSessaoInput): Promise<IpcResult<{ origem: Sessao; destino: Sessao }>> =>
       ipcRenderer.invoke('sessao:remarcar', id, input),
     sobreposicao: (inicioUtc: string, duracaoMin: number, excludingId?: string): Promise<IpcResult<{ colisoes: SessaoComPaciente[] }>> =>
       ipcRenderer.invoke('sessao:sobreposicao', inicioUtc, duracaoMin, excludingId)
+  },
+  contrato: {
+    vigente: (pacienteId: string, data: string): Promise<IpcResult<{ contrato: ContratoPreco | null }>> =>
+      ipcRenderer.invoke('contrato:vigente', pacienteId, data),
+    historico: (pacienteId: string): Promise<IpcResult<{ contratos: ContratoPreco[] }>> =>
+      ipcRenderer.invoke('contrato:historico', pacienteId),
+    reajustar: (
+      pacienteId: string,
+      input: ContratoPrecoInput
+    ): Promise<IpcResult<{ contrato: ContratoPreco; lancamentosNoPeriodoAfetado: number }>> =>
+      ipcRenderer.invoke('contrato:reajustar', pacienteId, input)
+  },
+  lancamento: {
+    listar: (pacienteId: string): Promise<IpcResult<{ lancamentos: Lancamento[] }>> =>
+      ipcRenderer.invoke('lancamento:listar', pacienteId),
+    criarAjuste: (pacienteId: string, input: LancamentoAjusteInput): Promise<IpcResult<{ lancamento: Lancamento }>> =>
+      ipcRenderer.invoke('lancamento:criarAjuste', pacienteId, input),
+    cancelar: (id: string): Promise<IpcResult<{ lancamento: Lancamento }>> => ipcRenderer.invoke('lancamento:cancelar', id)
   }
 }
 

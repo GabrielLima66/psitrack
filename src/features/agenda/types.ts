@@ -108,3 +108,33 @@ export interface CriarPacienteComAtendimentoInput {
   recorrencias: RecorrenciaInput[]
   contrato: ContratoPrecoInput
 }
+
+export type TipoLancamento = 'sessao' | 'falta' | 'ajuste' | 'desconto'
+export type StatusLancamento = 'pendente' | 'pago' | 'cancelado'
+
+export interface Lancamento {
+  id: string
+  pacienteId: string
+  sessaoId: string | null
+  competencia: string
+  tipo: TipoLancamento
+  descricao: string
+  valorCentavos: number
+  status: StatusLancamento
+  pagamentoId: string | null
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export interface LancamentoAjusteInput {
+  tipo: 'ajuste' | 'desconto'
+  valorCentavos: number
+  descricao: string
+  competencia: string
+}
+
+export interface ResultadoFaturamento {
+  lancamento: Lancamento | null
+  pendenciaSemContrato: boolean
+}

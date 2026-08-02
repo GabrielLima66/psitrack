@@ -47,7 +47,7 @@ export type SessaoComPaciente = Sessao & { pacienteNome: string }
 
 const HORIZONTE_SEMANAS = 12
 
-function obterSessaoOuFalhar(db: PsiTrackDatabase, id: string): Sessao {
+export function obterSessaoOuFalhar(db: PsiTrackDatabase, id: string): Sessao {
   const row = db.select().from(sessao).where(eq(sessao.id, id)).get()
   if (!row) throw new Error('Sessão não encontrada.')
   return row

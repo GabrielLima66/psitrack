@@ -69,3 +69,13 @@ export function precoVigenteEm(db: PsiTrackDatabase, pacienteId: string, data: s
     .limit(1)
     .get()
 }
+
+/** Histórico completo de vigências — aba Financeiro mostra tudo, não só a vigente. */
+export function listarContratosPaciente(db: PsiTrackDatabase, pacienteId: string): ContratoPreco[] {
+  return db
+    .select()
+    .from(contratoPreco)
+    .where(and(eq(contratoPreco.pacienteId, pacienteId), isNull(contratoPreco.deletedAt)))
+    .orderBy(desc(contratoPreco.vigenciaInicio))
+    .all()
+}

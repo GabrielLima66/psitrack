@@ -111,6 +111,16 @@ export interface RetificarEvolucaoInput {
   motivoRetificacao: string
 }
 
+/** "Evolução avulsa sem sessão oferece criar a sessão retroativa" (Etapa 12) — aceitando, cria sessão já `realizada` + evolução vinculada + cobrança, tudo numa transação. */
+export interface CriarEvolucaoComSessaoRetroativaInput {
+  pacienteId: string
+  dataLocal: string
+  horaLocal: string
+  duracaoMin?: number
+  modalidade: 'presencial' | 'online'
+  conteudo: string
+}
+
 /** NUNCA entra em export (CLAUDE.md invariante de dado #2). Ao contrário de Evolucao: edição e exclusão são livres. */
 export interface Anotacao {
   id: string

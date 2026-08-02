@@ -60,3 +60,55 @@ const TIPO_EVOLUCAO_LABELS: Record<string, string> = {
 export function formatarTipoEvolucao(tipo: string): string {
   return TIPO_EVOLUCAO_LABELS[tipo] ?? tipo
 }
+
+/** Centavos → 'R$ 150,00' — nunca formatar float, o valor já chega inteiro (CLAUDE.md invariante de dado #3). */
+export function formatarCentavos(valorCentavos: number): string {
+  return (valorCentavos / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
+const MODALIDADE_CONTRATO_LABELS: Record<string, string> = {
+  avulso: 'Avulso (por sessão)',
+  mensal: 'Mensal (por competência)',
+  encerrado: 'Encerrado'
+}
+
+export function formatarModalidadeContrato(modalidade: string): string {
+  return MODALIDADE_CONTRATO_LABELS[modalidade] ?? modalidade
+}
+
+const POLITICA_FALTA_LABELS: Record<string, string> = {
+  cobra_sempre: 'Cobra sempre',
+  cobra_sem_aviso: 'Cobra só sem aviso prévio',
+  nunca_cobra: 'Nunca cobra falta'
+}
+
+export function formatarPoliticaFalta(politica: string): string {
+  return POLITICA_FALTA_LABELS[politica] ?? politica
+}
+
+const TIPO_LANCAMENTO_LABELS: Record<string, string> = {
+  sessao: 'Sessão',
+  falta: 'Falta',
+  ajuste: 'Ajuste',
+  desconto: 'Desconto'
+}
+
+export function formatarTipoLancamento(tipo: string): string {
+  return TIPO_LANCAMENTO_LABELS[tipo] ?? tipo
+}
+
+const STATUS_LANCAMENTO_LABELS: Record<string, string> = {
+  pendente: 'Pendente',
+  pago: 'Pago',
+  cancelado: 'Cancelado'
+}
+
+export function formatarStatusLancamento(status: string): string {
+  return STATUS_LANCAMENTO_LABELS[status] ?? status
+}
+
+/** 'YYYY-MM' → 'MM/AAAA' — manipulação de string, mesma razão de formatarDataBr. */
+export function formatarCompetencia(competencia: string): string {
+  const [ano, mes] = competencia.split('-')
+  return `${mes}/${ano}`
+}

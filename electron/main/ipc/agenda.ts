@@ -1,13 +1,12 @@
 import { ipcMain } from 'electron'
 import { criarPacienteComAtendimento, type CriarPacienteComAtendimentoInput } from '../db/repositories/cadastroAtendimento'
+import { alterarStatusSessaoComCobranca, remarcarSessaoComCobranca } from '../db/repositories/faturamento'
 import { criarRecorrencia, listarRecorrencias, type RecorrenciaInput } from '../db/repositories/recorrencia'
 import {
-  alterarStatusSessao,
   criarSessaoAvulsa,
   encerrarSerie,
   listarSessoesPeriodo,
   materializarRecorrencia,
-  remarcarSessao,
   sobreposicaoHorario,
   type AlterarStatusSessaoInput,
   type CriarSessaoAvulsaInput,
@@ -49,11 +48,11 @@ export function registerAgendaHandlers(): void {
   )
 
   ipcMain.handle('sessao:alterarStatus', (_event, id: string, input: AlterarStatusSessaoInput) =>
-    safely(() => ({ sessao: alterarStatusSessao(getDb(), id, input) }))
+    safely(() => alterarStatusSessaoComCobranca(getDb(), id, input))
   )
 
   ipcMain.handle('sessao:remarcar', (_event, id: string, input: RemarcarSessaoInput) =>
-    safely(() => remarcarSessao(getDb(), id, input))
+    safely(() => remarcarSessaoComCobranca(getDb(), id, input))
   )
 
   ipcMain.handle('sessao:sobreposicao', (_event, inicioUtc: string, duracaoMin: number, excludingId?: string) =>

@@ -1,9 +1,10 @@
 import { create } from 'zustand'
-import type { ContratoPrecoInput, Recorrencia, RecorrenciaInput } from '../agenda/types'
+import type { ContratoPreco, ContratoPrecoInput, Lancamento, LancamentoAjusteInput, Recorrencia, RecorrenciaInput } from '../agenda/types'
 import type {
   AlterarStatusInput,
   Anotacao,
   AnotacaoInput,
+  CriarEvolucaoComSessaoRetroativaInput,
   CriarEvolucaoInput,
   Evolucao,
   ListarPacientesOptions,
@@ -62,6 +63,9 @@ interface PacientesStoreState {
 
   criarEvolucao: (input: CriarEvolucaoInput) => Promise<boolean>
   retificarEvolucao: (input: RetificarEvolucaoInput) => Promise<boolean>
+  criarEvolucaoComSessaoRetroativa: (input: CriarEvolucaoComSessaoRetroativaInput) => Promise<boolean>
+  /** Setado sempre que uma ação de cobrança sinaliza pendência por falta de contrato vigente (Etapa 12). */
+  pendenciaFinanceira: string | null
 
   criarAnotacao: (input: AnotacaoInput) => Promise<void>
   atualizarAnotacao: (id: string, input: AnotacaoInput) => Promise<void>
@@ -86,6 +90,20 @@ interface PacientesStoreState {
   prefillEvolucao: { sessaoId: string; dataSessao: string } | null
   abrirParaRegistrarEvolucao: (pacienteId: string, sessaoId: string, dataSessaoLocal: string) => Promise<void>
   limparPrefillEvolucao: () => void
+
+  // Aba Financeiro (Etapa 12): contrato vigente + histórico de vigências +
+  // lançamentos. Carregados só quando a aba é aberta (carregarFinanceiro),
+  // não junto com o resto da ficha.
+  contratoVigente: ContratoPreco | null
+  historicoContratos: ContratoPreco[]
+  lancamentos: Lancamento[]
+  financeiroBusy: boolean
+  financeiroError: string | null
+
+  carregarFinanceiro: () => Promise<void>
+  reajustarContrato: (input: ContratoPrecoInput) => Promise<number | null> // devolve quantos lançamentos existem no período afetado, ou null se falhou
+  criarLancamentoAjuste: (input: LancamentoAjusteInput) => Promise<boolean>
+  cancelarLancamento: (id: string) => Promise<void>
 }
 
 export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
@@ -109,6 +127,13 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
   contratoRascunho: contratoRascunhoVazio(),
   recorrenciasPaciente: [],
   prefillEvolucao: null,
+  pendenciaFinanceira: null,
+
+  contratoVigente: null,
+  historicoContratos: [],
+  lancamentos: [],
+  financeiroBusy: false,
+  financeiroError: null,
 
   carregarPacientes: async () => {
     set({ loading: true, listError: null })
@@ -149,7 +174,11 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
       recorrenciasRascunho: [],
       contratoRascunho: contratoRascunhoVazio(),
       recorrenciasPaciente: [],
-      prefillEvolucao: null
+      prefillEvolucao: null,
+      pendenciaFinanceira: null,
+      contratoVigente: null,
+      historicoContratos: [],
+      lancamentos: []
     }),
 
   abrirEdicaoPaciente: async (paciente) => {
@@ -161,7 +190,11 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
       anotacoes: [],
       formError: null,
       recorrenciasPaciente: [],
-      prefillEvolucao: null
+      prefillEvolucao: null,
+      pendenciaFinanceira: null,
+      contratoVigente: null,
+      historicoContratos: [],
+      lancamentos: []
     })
     const [responsaveis, evolucoes, anotacoes, recorrencias] = await Promise.all([
       window.psitrack.responsavel.listar(paciente.id),
@@ -173,6 +206,7 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
     if (evolucoes.ok) set({ evolucoes: evolucoes.evolucoes })
     if (anotacoes.ok) set({ anotacoes: anotacoes.anotacoes })
     if (recorrencias.ok) set({ recorrenciasPaciente: recorrencias.recorrencias })
+    void get().carregarFinanceiro()
   },
 
   voltarParaLista: () => {
@@ -196,6 +230,7 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
       if (!existente) {
         const recorrencias = await window.psitrack.recorrencia.listar(result.paciente.id)
         if (recorrencias.ok) set({ recorrenciasPaciente: recorrencias.recorrencias })
+        void get().carregarFinanceiro()
       }
       return true
     }
@@ -259,11 +294,14 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
   },
 
   criarEvolucao: async (input) => {
-    set({ formError: null })
+    set({ formError: null, pendenciaFinanceira: null })
     const result = await window.psitrack.evolucao.criar(input)
     if (!result.ok) {
       set({ formError: result.error })
       return false
+    }
+    if (result.pendenciaSemContrato) {
+      set({ pendenciaFinanceira: 'Sessão marcada como realizada, mas não há contrato vigente nesta data — cobrança pendente até configurar o preço na aba Financeiro.' })
     }
     const lista = await window.psitrack.evolucao.listar(input.pacienteId)
     if (lista.ok) set({ evolucoes: lista.evolucoes })
@@ -273,13 +311,31 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
   retificarEvolucao: async (input) => {
     const paciente = get().pacienteEmEdicao
     if (!paciente) return false
-    set({ formError: null })
+    set({ formError: null, pendenciaFinanceira: null })
     const result = await window.psitrack.evolucao.retificar(input)
     if (!result.ok) {
       set({ formError: result.error })
       return false
     }
+    if (result.pendenciaSemContrato) {
+      set({ pendenciaFinanceira: 'Sessão marcada como realizada, mas não há contrato vigente nesta data — cobrança pendente até configurar o preço na aba Financeiro.' })
+    }
     const lista = await window.psitrack.evolucao.listar(paciente.id)
+    if (lista.ok) set({ evolucoes: lista.evolucoes })
+    return true
+  },
+
+  criarEvolucaoComSessaoRetroativa: async (input) => {
+    set({ formError: null, pendenciaFinanceira: null })
+    const result = await window.psitrack.evolucao.criarComSessaoRetroativa(input)
+    if (!result.ok) {
+      set({ formError: result.error })
+      return false
+    }
+    if (result.pendenciaSemContrato) {
+      set({ pendenciaFinanceira: 'Sessão retroativa criada, mas não há contrato vigente nesta data — cobrança pendente até configurar o preço na aba Financeiro.' })
+    }
+    const lista = await window.psitrack.evolucao.listar(input.pacienteId)
     if (lista.ok) set({ evolucoes: lista.evolucoes })
     return true
   },
@@ -354,5 +410,58 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
     set({ prefillEvolucao: { sessaoId, dataSessao: dataSessaoLocal } })
   },
 
-  limparPrefillEvolucao: () => set({ prefillEvolucao: null })
+  limparPrefillEvolucao: () => set({ prefillEvolucao: null }),
+
+  carregarFinanceiro: async () => {
+    const paciente = get().pacienteEmEdicao
+    if (!paciente) return
+    set({ financeiroBusy: true, financeiroError: null })
+    const hoje = new Date().toISOString().slice(0, 10)
+    const [vigente, historico, lancamentos] = await Promise.all([
+      window.psitrack.contrato.vigente(paciente.id, hoje),
+      window.psitrack.contrato.historico(paciente.id),
+      window.psitrack.lancamento.listar(paciente.id)
+    ])
+    set({
+      financeiroBusy: false,
+      contratoVigente: vigente.ok ? vigente.contrato : null,
+      historicoContratos: historico.ok ? historico.contratos : [],
+      lancamentos: lancamentos.ok ? lancamentos.lancamentos : []
+    })
+    if (!vigente.ok) set({ financeiroError: vigente.error })
+  },
+
+  reajustarContrato: async (input) => {
+    const paciente = get().pacienteEmEdicao
+    if (!paciente) return null
+    set({ financeiroBusy: true, financeiroError: null })
+    const result = await window.psitrack.contrato.reajustar(paciente.id, input)
+    if (!result.ok) {
+      set({ financeiroBusy: false, financeiroError: result.error })
+      return null
+    }
+    await get().carregarFinanceiro()
+    return result.lancamentosNoPeriodoAfetado
+  },
+
+  criarLancamentoAjuste: async (input) => {
+    const paciente = get().pacienteEmEdicao
+    if (!paciente) return false
+    const result = await window.psitrack.lancamento.criarAjuste(paciente.id, input)
+    if (!result.ok) {
+      set({ financeiroError: result.error })
+      return false
+    }
+    await get().carregarFinanceiro()
+    return true
+  },
+
+  cancelarLancamento: async (id) => {
+    const result = await window.psitrack.lancamento.cancelar(id)
+    if (!result.ok) {
+      set({ financeiroError: result.error })
+      return
+    }
+    await get().carregarFinanceiro()
+  }
 }))

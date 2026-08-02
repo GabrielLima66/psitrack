@@ -69,7 +69,11 @@ export function criarEvolucao(db: PsiTrackDatabase, input: CriarEvolucaoInput): 
  * pra original (CLAUDE.md invariante de dado #1, reforçado por trigger
  * SQLite). `pacienteId` vem da entrada original, não do input — impede
  * retificar pra dentro do prontuário de outro paciente por engano/malícia.
- * Retificar uma retificação é permitido de propósito (cadeia).
+ * Retificar uma retificação é permitido de propósito (cadeia). `sessaoId`
+ * também herda da original (nunca do input): retificação é sobre a MESMA
+ * sessão, e é isso que garante que registrar a mesma sessão duas vezes
+ * (original + retificação) gera um lançamento só (SPEC-fase-2.md Etapa 12,
+ * faturamento.ts checa lançamento existente antes de criar).
  */
 export function retificarEvolucao(db: PsiTrackDatabase, input: RetificarEvolucaoInput): Evolucao {
   const parsed = retificarEvolucaoSchema.parse(input)
@@ -83,6 +87,7 @@ export function retificarEvolucao(db: PsiTrackDatabase, input: RetificarEvolucao
       conteudo: parsed.conteudo,
       dataSessao: parsed.dataSessao,
       tipo: parsed.tipo,
+      sessaoId: original.sessaoId,
       retificaId: parsed.retificaId,
       motivoRetificacao: parsed.motivoRetificacao,
       createdAt: new Date().toISOString()

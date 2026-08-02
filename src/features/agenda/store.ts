@@ -20,6 +20,8 @@ interface AgendaStoreState {
   sessaoSelecionadaId: string | null
   novaSessaoAberta: boolean
   pacientesDisponiveis: { id: string; nome: string }[]
+  /** Setado quando marcar status gera pendência por falta de contrato vigente (Etapa 12) — nunca cobra como zero. */
+  pendenciaFinanceira: string | null
 
   mudarVisao: (visao: VisaoAgenda) => void
   irParaHoje: () => void
@@ -55,6 +57,7 @@ export const useAgendaStore = create<AgendaStoreState>((set, get) => ({
   sessaoSelecionadaId: null,
   novaSessaoAberta: false,
   pacientesDisponiveis: [],
+  pendenciaFinanceira: null,
 
   mudarVisao: (visao) => {
     set({ visao })
@@ -99,8 +102,12 @@ export const useAgendaStore = create<AgendaStoreState>((set, get) => ({
   fecharNovaSessao: () => set({ novaSessaoAberta: false }),
 
   alterarStatus: async (id, input) => {
+    set({ error: null, pendenciaFinanceira: null })
     const result = await window.psitrack.sessao.alterarStatus(id, input)
     if (result.ok) {
+      if (result.pendenciaSemContrato) {
+        set({ pendenciaFinanceira: 'Sessão marcada, mas não há contrato vigente nesta data — cobrança pendente até configurar o preço na aba Financeiro do paciente.' })
+      }
       await get().carregar()
       set({ sessaoSelecionadaId: null })
       return true

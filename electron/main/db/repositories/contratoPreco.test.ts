@@ -8,7 +8,7 @@ import { contratoPreco } from '../schema'
 import { createTempDbPath } from '../test-support'
 import { uuidv7 } from '../uuidv7'
 import { criarPaciente } from './pacientes'
-import { criarContratoPreco, precoVigenteEm } from './contratoPreco'
+import { criarContratoPreco, listarContratosPaciente, precoVigenteEm } from './contratoPreco'
 
 const MIGRATIONS_FOLDER = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'migrations')
 
@@ -123,5 +123,17 @@ describe('criarContratoPreco', () => {
     expect(() =>
       criarContratoPreco(db, pacienteId, { modalidade: 'avulso', valorCentavos: 150.5, vigenciaInicio: '2026-01-01' })
     ).toThrow()
+  })
+})
+
+describe('listarContratosPaciente', () => {
+  it('lista todo o histórico, mais recente primeiro', () => {
+    criarContratoPreco(db, pacienteId, { modalidade: 'avulso', valorCentavos: 10000, vigenciaInicio: '2026-01-01' })
+    criarContratoPreco(db, pacienteId, { modalidade: 'avulso', valorCentavos: 12000, vigenciaInicio: '2026-04-01' })
+
+    const historico = listarContratosPaciente(db, pacienteId)
+    expect(historico).toHaveLength(2)
+    expect(historico[0]?.vigenciaInicio).toBe('2026-04-01')
+    expect(historico[1]?.vigenciaInicio).toBe('2026-01-01')
   })
 })
