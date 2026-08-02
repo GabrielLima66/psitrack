@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -13,15 +13,26 @@ import { uuidv7 } from './uuidv7'
 
 const MIGRATIONS_FOLDER = join(fileURLToPath(new URL('.', import.meta.url)), 'migrations')
 
-/** Clona a pasta real de migrations, mas removendo a 0003 — simula "banco no estado da Fase 1", antes da migration desta etapa existir. */
+/**
+ * Clona a pasta real de migrations, mas mantendo só até a 0002 — simula
+ * "banco no estado da Fase 1", antes da migration 0003 existir. Remove
+ * qualquer migration numerada >= 3 (não só a 0003 por nome): sem isso, cada
+ * migration nova adicionada depois (0004, 0005, ...) vazava pra dentro
+ * dessa pasta "Fase 1" simulada e quebrava o teste (já aconteceu com a
+ * 0004_anexo.sql).
+ */
 function criarPastaSemMigration0003(): string {
   const dir = mkdtempSync(join(tmpdir(), 'psitrack-sem-0003-'))
   cpSync(MIGRATIONS_FOLDER, dir, { recursive: true })
-  rmSync(join(dir, '0003_agenda_financeiro.sql'))
+
+  const numeroDaMigration = (nomeOuTag: string): number => Number(nomeOuTag.slice(0, 4))
+  for (const arquivo of readdirSync(dir)) {
+    if (arquivo.endsWith('.sql') && numeroDaMigration(arquivo) >= 3) rmSync(join(dir, arquivo))
+  }
 
   const journalPath = join(dir, 'meta', '_journal.json')
   const journal = JSON.parse(readFileSync(journalPath, 'utf-8')) as { entries: { tag: string }[] }
-  journal.entries = journal.entries.filter((entrada) => !entrada.tag.startsWith('0003_'))
+  journal.entries = journal.entries.filter((entrada) => numeroDaMigration(entrada.tag) < 3)
   writeFileSync(journalPath, JSON.stringify(journal, null, 2))
 
   return dir

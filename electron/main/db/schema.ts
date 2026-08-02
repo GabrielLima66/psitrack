@@ -248,3 +248,39 @@ export const pagamento = sqliteTable('pagamento', {
   updatedAt: text('updated_at').notNull(),
   deletedAt: text('deleted_at')
 })
+
+/**
+ * O blob de verdade (`<uuid>.enc`) mora fora do banco, em `{userData}/anexos/`
+ * — esta linha é só metadado + as chaves pra abrir o arquivo (SPEC-fase-3.md
+ * D25). `nomeOriginal` só existe aqui, nunca no filesystem (I7). `nonce` é da
+ * cifragem do CONTEÚDO; `chaveEnvelopada` é a DEK do arquivo (32 bytes,
+ * aleatória, única) envelopada pela chave mestra da sessão — sem o banco,
+ * o `.enc` sozinho é lixo criptográfico. `sha256Cifrado` é hash do blob
+ * (ciphertext+authTag) tal como gravado em disco, pra `verify` de backup
+ * conferir sem decifrar nada (D26).
+ */
+export const anexo = sqliteTable(
+  'anexo',
+  {
+    id: text('id').primaryKey(), // UUID v7 — é também o nome do arquivo em disco
+    pacienteId: text('paciente_id')
+      .notNull()
+      .references(() => pacientes.id),
+    evolucaoId: text('evolucao_id').references(() => prontuarioEvolucao.id),
+    classificacao: text('classificacao').notNull().$type<'prontuario' | 'privado'>(),
+    nomeOriginal: text('nome_original').notNull(),
+    mime: text('mime').notNull(),
+    tamanhoBytes: integer('tamanho_bytes').notNull(),
+    sha256Cifrado: text('sha256_cifrado').notNull(),
+    nonce: text('nonce').notNull(), // base64
+    chaveEnvelopada: text('chave_envelopada').notNull(), // base64
+    descricao: text('descricao'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+    deletedAt: text('deleted_at')
+  },
+  (t) => [
+    index('idx_anexo_paciente').on(t.pacienteId, t.classificacao, t.deletedAt),
+    index('idx_anexo_evolucao').on(t.evolucaoId)
+  ]
+)

@@ -29,6 +29,13 @@
       "when": 1785630265857,
       "tag": "0003_agenda_financeiro",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1785695502748,
+      "tag": "0004_anexo",
+      "breakpoints": true
     }
   ]
 }

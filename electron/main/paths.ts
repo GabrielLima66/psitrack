@@ -20,6 +20,11 @@ export function getBackupsDir(): string {
   return join(app.getPath('userData'), 'backups')
 }
 
+/** `<uuid>.enc` — nada além disso mora aqui (I7/SPEC-fase-3.md). */
+export function getAnexosDir(): string {
+  return join(app.getPath('userData'), 'anexos')
+}
+
 /**
  * As migrations (.sql + meta/) não são código JS, então o bundler do
  * electron-vite não as enxerga — no app empacotado elas são copiadas à
