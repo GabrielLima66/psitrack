@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { AgendaScreen } from '@/features/agenda/AgendaScreen'
 import { PacientesFlow } from '@/features/pacientes/PacientesFlow'
+import { AReceberScreen } from '@/features/receber/AReceberScreen'
 import { VaultFlow } from '@/features/vault/VaultFlow'
 import { useNavigationStore } from '@/store/navigation'
 
@@ -14,6 +15,9 @@ function NavegacaoTopo() {
       <Button type="button" variant={area === 'agenda' ? 'default' : 'ghost'} size="sm" onClick={() => irPara('agenda')}>
         Agenda
       </Button>
+      <Button type="button" variant={area === 'receber' ? 'default' : 'ghost'} size="sm" onClick={() => irPara('receber')}>
+        A receber
+      </Button>
     </div>
   )
 }
@@ -25,7 +29,9 @@ function App() {
     <VaultFlow>
       <div className="flex h-screen flex-col">
         <NavegacaoTopo />
-        <div className="min-h-0 flex-1 overflow-hidden">{area === 'agenda' ? <AgendaScreen /> : <PacientesFlow />}</div>
+        <div className="min-h-0 flex-1 overflow-hidden">
+          {area === 'agenda' ? <AgendaScreen /> : area === 'receber' ? <AReceberScreen /> : <PacientesFlow />}
+        </div>
       </div>
     </VaultFlow>
   )

@@ -1,5 +1,14 @@
 import { create } from 'zustand'
-import type { ContratoPreco, ContratoPrecoInput, Lancamento, LancamentoAjusteInput, Recorrencia, RecorrenciaInput } from '../agenda/types'
+import type {
+  ContratoPreco,
+  ContratoPrecoInput,
+  Lancamento,
+  LancamentoAjusteInput,
+  MarcarReciboEmitidoInput,
+  Pagamento,
+  Recorrencia,
+  RecorrenciaInput
+} from '../agenda/types'
 import type {
   AlterarStatusInput,
   Anotacao,
@@ -97,6 +106,7 @@ interface PacientesStoreState {
   contratoVigente: ContratoPreco | null
   historicoContratos: ContratoPreco[]
   lancamentos: Lancamento[]
+  pagamentos: Pagamento[]
   financeiroBusy: boolean
   financeiroError: string | null
 
@@ -104,6 +114,7 @@ interface PacientesStoreState {
   reajustarContrato: (input: ContratoPrecoInput) => Promise<number | null> // devolve quantos lançamentos existem no período afetado, ou null se falhou
   criarLancamentoAjuste: (input: LancamentoAjusteInput) => Promise<boolean>
   cancelarLancamento: (id: string) => Promise<void>
+  marcarReciboEmitido: (pagamentoId: string, input: MarcarReciboEmitidoInput) => Promise<void>
 }
 
 export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
@@ -132,6 +143,7 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
   contratoVigente: null,
   historicoContratos: [],
   lancamentos: [],
+  pagamentos: [],
   financeiroBusy: false,
   financeiroError: null,
 
@@ -178,7 +190,8 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
       pendenciaFinanceira: null,
       contratoVigente: null,
       historicoContratos: [],
-      lancamentos: []
+      lancamentos: [],
+      pagamentos: []
     }),
 
   abrirEdicaoPaciente: async (paciente) => {
@@ -194,7 +207,8 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
       pendenciaFinanceira: null,
       contratoVigente: null,
       historicoContratos: [],
-      lancamentos: []
+      lancamentos: [],
+      pagamentos: []
     })
     const [responsaveis, evolucoes, anotacoes, recorrencias] = await Promise.all([
       window.psitrack.responsavel.listar(paciente.id),
@@ -417,16 +431,18 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
     if (!paciente) return
     set({ financeiroBusy: true, financeiroError: null })
     const hoje = new Date().toISOString().slice(0, 10)
-    const [vigente, historico, lancamentos] = await Promise.all([
+    const [vigente, historico, lancamentos, pagamentos] = await Promise.all([
       window.psitrack.contrato.vigente(paciente.id, hoje),
       window.psitrack.contrato.historico(paciente.id),
-      window.psitrack.lancamento.listar(paciente.id)
+      window.psitrack.lancamento.listar(paciente.id),
+      window.psitrack.pagamento.listar(paciente.id)
     ])
     set({
       financeiroBusy: false,
       contratoVigente: vigente.ok ? vigente.contrato : null,
       historicoContratos: historico.ok ? historico.contratos : [],
-      lancamentos: lancamentos.ok ? lancamentos.lancamentos : []
+      lancamentos: lancamentos.ok ? lancamentos.lancamentos : [],
+      pagamentos: pagamentos.ok ? pagamentos.pagamentos : []
     })
     if (!vigente.ok) set({ financeiroError: vigente.error })
   },
@@ -458,6 +474,15 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
 
   cancelarLancamento: async (id) => {
     const result = await window.psitrack.lancamento.cancelar(id)
+    if (!result.ok) {
+      set({ financeiroError: result.error })
+      return
+    }
+    await get().carregarFinanceiro()
+  },
+
+  marcarReciboEmitido: async (pagamentoId, input) => {
+    const result = await window.psitrack.pagamento.marcarReciboEmitido(pagamentoId, input)
     if (!result.ok) {
       set({ financeiroError: result.error })
       return

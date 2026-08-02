@@ -237,9 +237,11 @@ export function PacienteFormScreen() {
               contratoVigente={store.contratoVigente}
               historicoContratos={store.historicoContratos}
               lancamentos={store.lancamentos}
+              pagamentos={store.pagamentos}
               onReajustar={store.reajustarContrato}
               onCriarAjuste={store.criarLancamentoAjuste}
               onCancelarLancamento={store.cancelarLancamento}
+              onMarcarReciboEmitido={store.marcarReciboEmitido}
             />
           </TabsContent>
         </Tabs>

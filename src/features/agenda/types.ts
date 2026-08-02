@@ -138,3 +138,25 @@ export interface ResultadoFaturamento {
   lancamento: Lancamento | null
   pendenciaSemContrato: boolean
 }
+
+export type MeioPagamento = 'pix' | 'dinheiro' | 'transferencia' | 'cartao' | 'outro'
+
+export interface Pagamento {
+  id: string
+  pacienteId: string
+  valorCentavos: number
+  data: string
+  meio: MeioPagamento
+  pagadorNome: string
+  pagadorCpf: string | null
+  reciboEmitidoEm: string | null
+  reciboReferencia: string | null
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export interface MarcarReciboEmitidoInput {
+  data: string
+  referencia: string
+}

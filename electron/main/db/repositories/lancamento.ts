@@ -1,8 +1,8 @@
-import { and, desc, eq, isNull } from 'drizzle-orm'
+import { and, asc, desc, eq, getTableColumns, isNull } from 'drizzle-orm'
 import { z } from 'zod'
 import type { PsiTrackDatabase } from '../connection'
 import { centavosSchema } from '../money'
-import { lancamento } from '../schema'
+import { lancamento, pacientes } from '../schema'
 import { uuidv7 } from '../uuidv7'
 
 const TIPO_MANUAL_VALUES = ['ajuste', 'desconto'] as const
@@ -38,6 +38,19 @@ export function listarLancamentosPaciente(db: PsiTrackDatabase, pacienteId: stri
     .from(lancamento)
     .where(and(eq(lancamento.pacienteId, pacienteId), isNull(lancamento.deletedAt)))
     .orderBy(desc(lancamento.competencia), desc(lancamento.createdAt))
+    .all()
+}
+
+export type LancamentoComPaciente = Lancamento & { pacienteNome: string }
+
+/** Tela "A receber" (Etapa 13) — todo o consultório, não um paciente só. */
+export function listarLancamentosPendentesTodos(db: PsiTrackDatabase): LancamentoComPaciente[] {
+  return db
+    .select({ ...getTableColumns(lancamento), pacienteNome: pacientes.nome })
+    .from(lancamento)
+    .innerJoin(pacientes, eq(lancamento.pacienteId, pacientes.id))
+    .where(and(eq(lancamento.status, 'pendente'), isNull(lancamento.deletedAt)))
+    .orderBy(asc(lancamento.competencia))
     .all()
 }
 

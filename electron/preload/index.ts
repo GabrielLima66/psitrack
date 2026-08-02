@@ -284,6 +284,68 @@ export interface CriarEvolucaoComSessaoRetroativaInput {
   conteudo: string
 }
 
+export interface LancamentoComPaciente extends Lancamento {
+  pacienteNome: string
+}
+
+export type MeioPagamento = 'pix' | 'dinheiro' | 'transferencia' | 'cartao' | 'outro'
+
+/** `pagadorNome`/`pagadorCpf` são snapshot, não FK (D18) — recibo já emitido continua refletindo quem pagou mesmo que o responsável mude depois. */
+export interface Pagamento {
+  id: string
+  pacienteId: string
+  valorCentavos: number
+  data: string // regime de caixa
+  meio: MeioPagamento
+  pagadorNome: string
+  pagadorCpf: string | null
+  reciboEmitidoEm: string | null
+  reciboReferencia: string | null
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+/** `lancamentoIds` decide o valor — o main recalcula a soma, nunca confia num total vindo do renderer. */
+export interface RegistrarPagamentoInput {
+  lancamentoIds: string[]
+  data: string
+  meio: MeioPagamento
+  pagadorNome: string
+  pagadorCpf?: string | null
+}
+
+export interface MarcarReciboEmitidoInput {
+  data: string
+  referencia: string
+}
+
+export interface RecebidoPorMeio {
+  meio: string
+  totalCentavos: number
+}
+
+export interface EmAbertoPorPaciente {
+  pacienteId: string
+  pacienteNome: string
+  totalCentavos: number
+}
+
+export interface LinhaPagamentoRelatorio {
+  pacienteNome: string
+  pagadorNome: string
+  pagadorCpf: string | null
+  valorCentavos: number
+  data: string
+}
+
+export interface RelatorioMensal {
+  competencia: string
+  recebidoPorMeio: RecebidoPorMeio[]
+  emAbertoPorPaciente: EmAbertoPorPaciente[]
+  pagamentos: LinhaPagamentoRelatorio[]
+}
+
 const api = {
   app: {
     getVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion')
@@ -385,7 +447,23 @@ const api = {
       ipcRenderer.invoke('lancamento:listar', pacienteId),
     criarAjuste: (pacienteId: string, input: LancamentoAjusteInput): Promise<IpcResult<{ lancamento: Lancamento }>> =>
       ipcRenderer.invoke('lancamento:criarAjuste', pacienteId, input),
-    cancelar: (id: string): Promise<IpcResult<{ lancamento: Lancamento }>> => ipcRenderer.invoke('lancamento:cancelar', id)
+    cancelar: (id: string): Promise<IpcResult<{ lancamento: Lancamento }>> => ipcRenderer.invoke('lancamento:cancelar', id),
+    listarPendentesTodos: (): Promise<IpcResult<{ lancamentos: LancamentoComPaciente[] }>> =>
+      ipcRenderer.invoke('lancamento:listarPendentesTodos')
+  },
+  pagamento: {
+    registrar: (pacienteId: string, input: RegistrarPagamentoInput): Promise<IpcResult<{ pagamento: Pagamento }>> =>
+      ipcRenderer.invoke('pagamento:registrar', pacienteId, input),
+    listar: (pacienteId: string): Promise<IpcResult<{ pagamentos: Pagamento[] }>> =>
+      ipcRenderer.invoke('pagamento:listar', pacienteId),
+    marcarReciboEmitido: (id: string, input: MarcarReciboEmitidoInput): Promise<IpcResult<{ pagamento: Pagamento }>> =>
+      ipcRenderer.invoke('pagamento:marcarReciboEmitido', id, input)
+  },
+  relatorio: {
+    mensal: (competencia: string): Promise<IpcResult<{ relatorio: RelatorioMensal }>> =>
+      ipcRenderer.invoke('relatorio:mensal', competencia),
+    exportarCsv: (competencia: string): Promise<IpcResult<{ cancelado: boolean; caminho?: string }>> =>
+      ipcRenderer.invoke('relatorio:exportarCsv', competencia)
   }
 }
 

@@ -5,11 +5,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import type { ContratoPreco, ContratoPrecoInput, Lancamento, LancamentoAjusteInput, PoliticaFalta } from '../agenda/types'
+import type { ContratoPreco, ContratoPrecoInput, Lancamento, LancamentoAjusteInput, MarcarReciboEmitidoInput, Pagamento, PoliticaFalta } from '../agenda/types'
 import {
   formatarCentavos,
   formatarCompetencia,
   formatarDataBr,
+  formatarMeioPagamento,
   formatarModalidadeContrato,
   formatarPoliticaFalta,
   formatarStatusLancamento,
@@ -20,9 +21,11 @@ interface FinanceiroSectionProps {
   contratoVigente: ContratoPreco | null
   historicoContratos: ContratoPreco[]
   lancamentos: Lancamento[]
+  pagamentos: Pagamento[]
   onReajustar: (input: ContratoPrecoInput) => Promise<number | null>
   onCriarAjuste: (input: LancamentoAjusteInput) => Promise<boolean>
   onCancelarLancamento: (id: string) => Promise<void>
+  onMarcarReciboEmitido: (pagamentoId: string, input: MarcarReciboEmitidoInput) => Promise<void>
 }
 
 const POLITICA_OPTIONS: { value: PoliticaFalta; label: string }[] = [
@@ -40,9 +43,11 @@ export function FinanceiroSection({
   contratoVigente,
   historicoContratos,
   lancamentos,
+  pagamentos,
   onReajustar,
   onCriarAjuste,
-  onCancelarLancamento
+  onCancelarLancamento,
+  onMarcarReciboEmitido
 }: FinanceiroSectionProps) {
   const [reajustando, setReajustando] = useState(false)
   const [novoValor, setNovoValor] = useState('')
@@ -50,6 +55,10 @@ export function FinanceiroSection({
   const [novaPolitica, setNovaPolitica] = useState<PoliticaFalta>('cobra_sem_aviso')
   const [novaVigencia, setNovaVigencia] = useState(hoje())
   const [avisoLancamentos, setAvisoLancamentos] = useState<number | null>(null)
+
+  const [emitindoReciboId, setEmitindoReciboId] = useState<string | null>(null)
+  const [reciboData, setReciboData] = useState(hoje())
+  const [reciboReferencia, setReciboReferencia] = useState('')
 
   const [ajustando, setAjustando] = useState(false)
   const [ajusteTipo, setAjusteTipo] = useState<'ajuste' | 'desconto'>('ajuste')
@@ -81,6 +90,18 @@ export function FinanceiroSection({
       setAjusteValor('')
       setAjusteDescricao('')
     }
+  }
+
+  function abrirEmitirRecibo(pagamentoId: string): void {
+    setEmitindoReciboId(pagamentoId)
+    setReciboData(hoje())
+    setReciboReferencia('')
+  }
+
+  async function handleMarcarRecibo(): Promise<void> {
+    if (!emitindoReciboId) return
+    await onMarcarReciboEmitido(emitindoReciboId, { data: reciboData, referencia: reciboReferencia })
+    setEmitindoReciboId(null)
   }
 
   const lancamentosPorCompetencia = new Map<string, Lancamento[]>()
@@ -268,6 +289,57 @@ export function FinanceiroSection({
             </div>
           </div>
         ))}
+      </div>
+
+      <div className="rounded-lg border border-border p-4">
+        <h3 className="mb-2 text-sm font-semibold text-foreground">Pagamentos</h3>
+        {pagamentos.length === 0 && <p className="text-sm text-muted-foreground">Nenhum pagamento registrado ainda.</p>}
+        <div className="flex flex-col gap-2">
+          {pagamentos.map((p) => (
+            <div key={p.id} className="flex flex-col gap-2 rounded-md border border-border px-3 py-2 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-foreground">
+                  {formatarCentavos(p.valorCentavos)} · {formatarMeioPagamento(p.meio)} · {formatarDataBr(p.data)}
+                </span>
+                {p.reciboEmitidoEm ? (
+                  <span className="text-xs text-muted-foreground">
+                    Recibo emitido em {formatarDataBr(p.reciboEmitidoEm)} — ref. {p.reciboReferencia}
+                  </span>
+                ) : (
+                  emitindoReciboId !== p.id && (
+                    <Button type="button" variant="outline" size="sm" onClick={() => abrirEmitirRecibo(p.id)}>
+                      Marcar recibo emitido
+                    </Button>
+                  )
+                )}
+              </div>
+              <span className="text-xs text-muted-foreground">Pagador: {p.pagadorNome}{p.pagadorCpf ? ` (${p.pagadorCpf})` : ''}</span>
+
+              {emitindoReciboId === p.id && (
+                <div className="flex items-end gap-2 rounded-md bg-muted p-2">
+                  <div className="flex flex-col gap-1">
+                    <Label htmlFor={`recibo-data-${p.id}`}>Data</Label>
+                    <Input id={`recibo-data-${p.id}`} type="date" value={reciboData} onChange={(e) => setReciboData(e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Label htmlFor={`recibo-referencia-${p.id}`}>Referência</Label>
+                    <Input
+                      id={`recibo-referencia-${p.id}`}
+                      value={reciboReferencia}
+                      onChange={(e) => setReciboReferencia(e.target.value)}
+                    />
+                  </div>
+                  <Button type="button" size="sm" disabled={!reciboReferencia.trim()} onClick={handleMarcarRecibo}>
+                    Confirmar
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setEmitindoReciboId(null)}>
+                    Cancelar
+                  </Button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )

@@ -112,3 +112,15 @@ export function formatarCompetencia(competencia: string): string {
   const [ano, mes] = competencia.split('-')
   return `${mes}/${ano}`
 }
+
+const MEIO_PAGAMENTO_LABELS: Record<string, string> = {
+  pix: 'Pix',
+  dinheiro: 'Dinheiro',
+  transferencia: 'Transferência',
+  cartao: 'Cartão',
+  outro: 'Outro'
+}
+
+export function formatarMeioPagamento(meio: string): string {
+  return MEIO_PAGAMENTO_LABELS[meio] ?? meio
+}
