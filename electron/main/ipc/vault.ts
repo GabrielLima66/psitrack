@@ -11,8 +11,8 @@ import {
 import { decodeRecoveryKey, encodeRecoveryKey, formatRecoveryKeyForDisplay } from '../crypto/recovery-key'
 import type { KeySession } from '../crypto/session'
 import { openDatabase, type PsiTrackDatabase } from '../db/connection'
-import { runMigrations } from '../db/migrate'
-import { getDbPath, getKeysFilePath, getMigrationsFolder } from '../paths'
+import { getBackupsDir, getDbPath, getKeysFilePath, getMigrationsFolder } from '../paths'
+import { migrarComSeguranca } from '../backup/pre-migration'
 import { safely } from './result'
 
 let db: PsiTrackDatabase | null = null
@@ -25,11 +25,9 @@ export function getDb(): PsiTrackDatabase {
 
 function openAndMigrate(dek: Buffer): void {
   db = openDatabase({ filePath: getDbPath(), dek })
-  // Idempotente num banco já atualizado (drizzle pula migration já aplicada).
-  // Ainda não existe uma 2ª versão de schema pra exercitar a regra do
-  // CLAUDE.md de "snapshot antes de migrar banco já existente" — quando
-  // houver, o backup precisa entrar aqui antes do runMigrations.
-  runMigrations(db, getMigrationsFolder())
+  // migrarComSeguranca (Etapa 9) só faz snapshot+verify quando há migration
+  // pendente num banco já existente — banco novo/já atualizado passa direto.
+  migrarComSeguranca({ db, dek, migrationsFolder: getMigrationsFolder(), backupDir: getBackupsDir() })
 }
 
 /** Handlers do domínio "vault": senha mestra, recovery key, auto-lock. */

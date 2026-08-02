@@ -15,6 +15,11 @@ export function getKeysFilePath(): string {
   return join(app.getPath('userData'), 'keys.json')
 }
 
+/** Snapshots pré-migração (Etapa 9) e futuros backups manuais vivem aqui. */
+export function getBackupsDir(): string {
+  return join(app.getPath('userData'), 'backups')
+}
+
 /**
  * As migrations (.sql + meta/) não são código JS, então o bundler do
  * electron-vite não as enxerga — no app empacotado elas são copiadas à
