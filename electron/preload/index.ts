@@ -382,6 +382,42 @@ export interface AnexarViaDialogoInput {
   descricao?: string | null
 }
 
+export interface BackupBlobEntry {
+  id: string
+  sha256Cifrado: string
+  tamanhoBytes: number
+}
+
+export interface BackupVerificationResult {
+  ok: boolean
+  integrityCheck: string
+  cipherIntegrityCheckOk: boolean
+  rowCounts: Record<string, number>
+  rowCountsMatchSource: boolean
+  blobs: { ok: boolean; problemas: string[] }
+}
+
+export interface BackupManifestDTO {
+  createdAt: string
+  schemaVersion: number
+  verification: BackupVerificationResult
+  blobs: { entries: BackupBlobEntry[]; total: number }
+}
+
+export type OrigemBackup = 'manual' | 'pre-restore'
+
+export interface BackupListado {
+  pasta: string
+  origem: OrigemBackup
+  tamanhoBytes: number
+  manifest: BackupManifestDTO
+}
+
+export interface RegistroRestauracao {
+  restauradoEm: string
+  pastaOrigem: string
+}
+
 const api = {
   app: {
     getVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion')
@@ -516,6 +552,16 @@ const api = {
       ipcRenderer.invoke('anexo:salvarCopia', anexoId),
     excluir: (id: string): Promise<IpcResult> => ipcRenderer.invoke('anexo:excluir', id),
     restaurar: (id: string): Promise<IpcResult> => ipcRenderer.invoke('anexo:restaurar', id)
+  },
+  backup: {
+    listar: (): Promise<IpcResult<{ backups: BackupListado[] }>> => ipcRenderer.invoke('backup:listar'),
+    criar: (): Promise<IpcResult<{ backup: BackupListado }>> => ipcRenderer.invoke('backup:criar'),
+    verificar: (pasta: string): Promise<IpcResult<{ resultado: BackupVerificationResult }>> =>
+      ipcRenderer.invoke('backup:verificar', pasta),
+    ultimaRestauracao: (): Promise<IpcResult<{ registro: RegistroRestauracao | null }>> =>
+      ipcRenderer.invoke('backup:ultimaRestauracao'),
+    /** O app fecha e reabre sozinho depois de restaurar — esta promise normalmente nunca chega a resolver (o processo morre antes). */
+    restaurar: (pasta: string): Promise<IpcResult> => ipcRenderer.invoke('backup:restaurar', pasta)
   }
 }
 

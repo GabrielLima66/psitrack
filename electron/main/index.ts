@@ -4,6 +4,7 @@ import { registerAgendaHandlers } from './ipc/agenda'
 import { registerAnexosHandlers } from './ipc/anexos'
 import { registerAnotacoesHandlers } from './ipc/anotacoes'
 import { registerAppHandlers } from './ipc/app'
+import { registerBackupHandlers } from './ipc/backup'
 import { registerEvolucaoHandlers } from './ipc/evolucao'
 import { registerFinanceiroHandlers } from './ipc/financeiro'
 import { registerPacientesHandlers } from './ipc/pacientes'
@@ -62,6 +63,7 @@ app.whenReady().then(() => {
   registerAgendaHandlers()
   registerFinanceiroHandlers()
   registerAnexosHandlers(session)
+  registerBackupHandlers(session)
   createWindow()
 
   // Poll de ociosidade do SO inteiro (CLAUDE.md invariante #6: 5 min sem

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type AreaApp = 'pacientes' | 'agenda' | 'receber'
+export type AreaApp = 'pacientes' | 'agenda' | 'receber' | 'configuracoes'
 
 interface NavigationState {
   area: AreaApp

@@ -24,6 +24,12 @@ export function getDb(): PsiTrackDatabase {
   return db
 }
 
+/** Fecha o handle de arquivo do banco vivo — usado por `vault:lock` e pelo restore de backup (que precisa sobrescrever o `.db` por baixo). */
+export function closeDb(): void {
+  db?.$client.close()
+  db = null
+}
+
 function openAndMigrate(dek: Buffer): void {
   db = openDatabase({ filePath: getDbPath(), dek })
   // migrarComSeguranca (Etapa 9) só faz snapshot+verify quando há migration
@@ -84,7 +90,6 @@ export function registerVaultHandlers(session: KeySession): void {
 
   ipcMain.handle('vault:lock', () => {
     session.lock()
-    db?.$client.close()
-    db = null
+    closeDb()
   })
 }
