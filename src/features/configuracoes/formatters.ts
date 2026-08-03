@@ -18,3 +18,9 @@ export function formatarBytes(bytes: number): string {
   const mb = kb / 1024
   return `${mb.toFixed(mb < 10 ? 1 : 0)} MB`
 }
+
+/** Indicador de defasagem do backup externo (D41/D42) — arredonda pra baixo, "hoje" conta como 0. */
+export function diasDesde(iso: string): number {
+  const ms = Date.now() - new Date(iso).getTime()
+  return Math.max(0, Math.floor(ms / (24 * 60 * 60 * 1000)))
+}

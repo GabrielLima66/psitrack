@@ -1,25 +1,62 @@
-import { app, ipcMain } from 'electron'
-import { criarBackupManual, listarBackups, restaurarBackupComSeguranca, verificarBackup } from '../backup/gerenciador'
+import { app, BrowserWindow, ipcMain } from 'electron'
+import { escolherPastaDestino } from '../anexos/dialogos'
+import { criarBackupComDestino, gravarConfig, lerConfig, validarDestino, verificarSnapshotExterno } from '../backup/destinos'
+import { listarBackups, restaurarBackupComSeguranca, verificarBackup } from '../backup/gerenciador'
 import { lerUltimaRestauracao } from '../backup/registroRestauracao'
 import type { KeySession } from '../crypto/session'
-import { getAnexosDir, getBackupsDir, getDbPath, getKeysFilePath, getMigrationsFolder } from '../paths'
+import { getAnexosDir, getBackupsDir, getConfigPath, getDbPath, getKeysFilePath, getMigrationsFolder } from '../paths'
 import { safely } from './result'
 import { closeDb, getDb } from './vault'
 
-/** Handlers da tela de Configurações — Etapa 17 (SPEC-fase-3.md): backup manual local, listagem, verificação e restore. */
+/** Handlers da tela de Configurações — Etapas 17-19 (SPEC-fase-3.md/SPEC-fase-4.md): backup manual local + destino externo, listagem, verificação e restore. */
 export function registerBackupHandlers(session: KeySession): void {
   ipcMain.handle('backup:listar', () => safely(() => ({ backups: listarBackups(getBackupsDir()) })))
 
+  // Local sempre + externo quando configurado (D42: destino indisponível é
+  // estado — `destinoOk` reflete isso pra UI, nunca vira erro bloqueante).
   ipcMain.handle('backup:criar', () =>
-    safely(() => ({
-      backup: criarBackupManual({
+    safely(() => {
+      const resultado = criarBackupComDestino({
         db: getDb(),
         dek: session.getDek(),
         backupDir: getBackupsDir(),
         anexosDir: getAnexosDir(),
-        keysFilePath: getKeysFilePath()
+        keysFilePath: getKeysFilePath(),
+        configPath: getConfigPath()
       })
-    }))
+      return resultado
+    })
+  )
+
+  ipcMain.handle('backup:obterConfigDestino', () => safely(() => lerConfig(getConfigPath())))
+
+  ipcMain.handle('backup:configurarDestino', (event) =>
+    safely(async () => {
+      const janela = BrowserWindow.fromWebContents(event.sender)
+      const pasta = await escolherPastaDestino(janela)
+      if (!pasta) return { cancelado: true as const, destino: null }
+
+      validarDestino(pasta, app.getPath('userData'))
+      const config = lerConfig(getConfigPath())
+      gravarConfig(getConfigPath(), { ...config, destinoBackupExterno: pasta })
+      return { cancelado: false as const, destino: pasta }
+    })
+  )
+
+  ipcMain.handle('backup:removerDestino', () =>
+    safely(() => {
+      const config = lerConfig(getConfigPath())
+      gravarConfig(getConfigPath(), { ...config, destinoBackupExterno: null })
+      return {}
+    })
+  )
+
+  ipcMain.handle('backup:verificarDestino', () =>
+    safely(() => {
+      const config = lerConfig(getConfigPath())
+      if (!config.destinoBackupExterno) return { resultado: null }
+      return { resultado: verificarSnapshotExterno(config.destinoBackupExterno, session.getDek()) }
+    })
   )
 
   ipcMain.handle('backup:verificar', (_event, pasta: string) =>

@@ -1,10 +1,11 @@
 import { useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { BackupItem } from './BackupItem'
+import { DestinoBackupSection } from './DestinoBackupSection'
 import { formatarDataHoraBr } from './formatters'
 import { useConfiguracoesStore } from './store'
 
-/** Tela "Configurações" (Etapas 17-18): backup manual local e restore, com snapshot de segurança automático antes de sobrescrever, e informações do app. */
+/** Tela "Configurações" (Etapas 17-19): backup manual local + destino externo e restore, com snapshot de segurança automático antes de sobrescrever, e informações do app. */
 export function ConfiguracoesScreen() {
   const store = useConfiguracoesStore()
 
@@ -34,8 +35,24 @@ export function ConfiguracoesScreen() {
           </p>
         )}
 
+        {store.avisoDestino && (
+          <p className="text-sm text-warn-foreground">{store.avisoDestino}</p>
+        )}
+
         {store.error && <p className="text-sm text-destructive">{store.error}</p>}
       </div>
+
+      <DestinoBackupSection
+        destino={store.destino}
+        ultimoBackupExternoEm={store.ultimoBackupExternoEm}
+        configurando={store.configurandoDestino}
+        error={store.destinoError}
+        verificacao={store.verificacaoDestino}
+        verificando={store.verificandoDestino}
+        onConfigurar={() => void store.configurarDestino()}
+        onRemover={() => void store.removerDestino()}
+        onVerificar={() => void store.verificarDestino()}
+      />
 
       <div className="flex flex-col gap-2">
         {store.loading && <p className="text-sm text-muted-foreground">Carregando…</p>}

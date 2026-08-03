@@ -36,20 +36,24 @@ export interface VerificationResult {
   blobs: { ok: boolean; problemas: string[] }
 }
 
+export interface IntegridadeArquivo {
+  integrityCheck: string
+  cipherIntegrityCheckOk: boolean
+  rowCounts: Record<string, number>
+  rowCountsMatchSource: boolean
+}
+
 /**
  * Dois níveis de checagem, de propósito: `integrity_check` valida a
  * estrutura lógica do SQLite já decifrada; `cipher_integrity_check` valida
  * o HMAC por página do SQLCipher e pega corrupção na camada de cifra que o
- * primeiro não enxerga. `blobCheck` é opcional — call sites sem anexo pra
- * conferir (ou de antes da Etapa 15) continuam funcionando sem passar nada,
- * e `blobs.ok` fica `true` por não ter o que reprovar.
+ * primeiro não enxerga. Extraída de `verifySnapshot` (Etapa 19) pra ser
+ * reaproveitada por `destinos.ts`, que confere blobs contra um pool
+ * endereçado por sha256 — convenção de nome de arquivo diferente da local
+ * (por id), então não pode reusar `verifySnapshot` inteiro sem reimplementar
+ * `verificarBlobs` pra outro esquema de nome.
  */
-export function verifySnapshot(
-  filePath: string,
-  dek: Buffer,
-  sourceRowCounts: Record<string, number>,
-  blobCheck?: { entries: BlobManifestEntry[]; blobsDir: string }
-): VerificationResult {
+export function verificarIntegridadeArquivo(filePath: string, dek: Buffer, sourceRowCounts: Record<string, number>): IntegridadeArquivo {
   const sqlite = new Database(filePath)
   try {
     sqlite.pragma(`key="x'${dek.toString('hex')}'"`)
@@ -57,17 +61,35 @@ export function verifySnapshot(
     const cipherProblems = sqlite.pragma('cipher_integrity_check') as unknown[]
     const rowCounts = getRowCounts(sqlite)
     const rowCountsMatchSource = rowCountsEqual(rowCounts, sourceRowCounts)
-    const blobs = blobCheck ? verificarBlobs(blobCheck.entries, blobCheck.blobsDir) : { ok: true, problemas: [] }
 
     return {
-      ok: integrityCheck === 'ok' && cipherProblems.length === 0 && rowCountsMatchSource && blobs.ok,
       integrityCheck,
       cipherIntegrityCheckOk: cipherProblems.length === 0,
       rowCounts,
-      rowCountsMatchSource,
-      blobs
+      rowCountsMatchSource
     }
   } finally {
     sqlite.close()
+  }
+}
+
+/**
+ * `blobCheck` é opcional — call sites sem anexo pra conferir (ou de antes da
+ * Etapa 15) continuam funcionando sem passar nada, e `blobs.ok` fica `true`
+ * por não ter o que reprovar.
+ */
+export function verifySnapshot(
+  filePath: string,
+  dek: Buffer,
+  sourceRowCounts: Record<string, number>,
+  blobCheck?: { entries: BlobManifestEntry[]; blobsDir: string }
+): VerificationResult {
+  const integridade = verificarIntegridadeArquivo(filePath, dek, sourceRowCounts)
+  const blobs = blobCheck ? verificarBlobs(blobCheck.entries, blobCheck.blobsDir) : { ok: true, problemas: [] }
+
+  return {
+    ok: integridade.integrityCheck === 'ok' && integridade.cipherIntegrityCheckOk && integridade.rowCountsMatchSource && blobs.ok,
+    ...integridade,
+    blobs
   }
 }

@@ -15,6 +15,11 @@ export function getKeysFilePath(): string {
   return join(app.getPath('userData'), 'keys.json')
 }
 
+/** Config de app não-sensível (caminho do destino de backup externo, etc.) — nunca dado clínico, por isso fica em claro. */
+export function getConfigPath(): string {
+  return join(app.getPath('userData'), 'config.json')
+}
+
 /** Snapshots pré-migração (Etapa 9) e futuros backups manuais vivem aqui. */
 export function getBackupsDir(): string {
   return join(app.getPath('userData'), 'backups')

@@ -418,6 +418,12 @@ export interface RegistroRestauracao {
   pastaOrigem: string
 }
 
+/** Config de app não-sensível (Etapa 19) — só o caminho do destino externo e quando foi o último backup lá bem-sucedido. */
+export interface ConfigDestino {
+  destinoBackupExterno: string | null
+  ultimoBackupExternoEm: string | null
+}
+
 const api = {
   app: {
     getVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion')
@@ -555,13 +561,23 @@ const api = {
   },
   backup: {
     listar: (): Promise<IpcResult<{ backups: BackupListado[] }>> => ipcRenderer.invoke('backup:listar'),
-    criar: (): Promise<IpcResult<{ backup: BackupListado }>> => ipcRenderer.invoke('backup:criar'),
+    /** Local sempre + externo se houver destino configurado — `destinoOk` é `null` (sem destino), `true` ou `false` (D42: falha de destino nunca bloqueia o backup local). */
+    criar: (): Promise<IpcResult<{ backup: BackupListado; destinoOk: boolean | null; destinoErro?: string }>> =>
+      ipcRenderer.invoke('backup:criar'),
     verificar: (pasta: string): Promise<IpcResult<{ resultado: BackupVerificationResult }>> =>
       ipcRenderer.invoke('backup:verificar', pasta),
     ultimaRestauracao: (): Promise<IpcResult<{ registro: RegistroRestauracao | null }>> =>
       ipcRenderer.invoke('backup:ultimaRestauracao'),
     /** O app fecha e reabre sozinho depois de restaurar — esta promise normalmente nunca chega a resolver (o processo morre antes). */
-    restaurar: (pasta: string): Promise<IpcResult> => ipcRenderer.invoke('backup:restaurar', pasta)
+    restaurar: (pasta: string): Promise<IpcResult> => ipcRenderer.invoke('backup:restaurar', pasta),
+    obterConfigDestino: (): Promise<IpcResult<ConfigDestino>> => ipcRenderer.invoke('backup:obterConfigDestino'),
+    /** Abre o diálogo de pasta (respeita PSITRACK_TEST_DIALOG_PATH), valida e salva — recusa pasta dentro do próprio userData. */
+    configurarDestino: (): Promise<IpcResult<{ cancelado: boolean; destino: string | null }>> =>
+      ipcRenderer.invoke('backup:configurarDestino'),
+    removerDestino: (): Promise<IpcResult> => ipcRenderer.invoke('backup:removerDestino'),
+    /** Reconfere o snapshot externo mais recente contra o pool. `resultado` é `null` se ainda não há nenhum snapshot externo. */
+    verificarDestino: (): Promise<IpcResult<{ resultado: BackupVerificationResult | null }>> =>
+      ipcRenderer.invoke('backup:verificarDestino')
   }
 }
 

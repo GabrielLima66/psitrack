@@ -40,3 +40,8 @@ export interface RegistroRestauracao {
   restauradoEm: string
   pastaOrigem: string
 }
+
+export interface ConfigDestino {
+  destinoBackupExterno: string | null
+  ultimoBackupExternoEm: string | null
+}

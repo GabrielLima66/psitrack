@@ -15,7 +15,7 @@ export interface BlobManifestEntry {
 // `anexo.tamanhoBytes` guarda o tamanho do PLAINTEXT (útil pra UI mostrar o
 // tamanho real do arquivo original) — o `.enc` em disco é sempre 16 bytes
 // maior que isso.
-const AUTH_TAG_LENGTH_BYTES = 16
+export const AUTH_TAG_LENGTH_BYTES = 16
 
 function caminhoBlob(dir: string, id: string): string {
   return join(dir, `${id}.enc`)

@@ -12,10 +12,25 @@ interface ConfiguracoesStoreState {
   ultimaRestauracao: RegistroRestauracao | null
   versao: string | null
 
+  // Destino externo (Etapa 19) — D42: falha do destino nunca é erro
+  // bloqueante, por isso fica em `avisoDestino` (aviso dispensável), não em
+  // `error` (que a UI trata como falha da ação).
+  destino: string | null
+  ultimoBackupExternoEm: string | null
+  configurandoDestino: boolean
+  destinoError: string | null
+  avisoDestino: string | null
+  verificacaoDestino: BackupVerificationResult | null
+  verificandoDestino: boolean
+
   carregar: () => Promise<void>
   criarBackup: () => Promise<void>
   verificar: (pasta: string) => Promise<void>
   restaurar: (pasta: string) => void
+
+  configurarDestino: () => Promise<void>
+  removerDestino: () => Promise<void>
+  verificarDestino: () => Promise<void>
 }
 
 export const useConfiguracoesStore = create<ConfiguracoesStoreState>((set, get) => ({
@@ -29,29 +44,43 @@ export const useConfiguracoesStore = create<ConfiguracoesStoreState>((set, get) 
   ultimaRestauracao: null,
   versao: null,
 
+  destino: null,
+  ultimoBackupExternoEm: null,
+  configurandoDestino: false,
+  destinoError: null,
+  avisoDestino: null,
+  verificacaoDestino: null,
+  verificandoDestino: false,
+
   carregar: async () => {
     set({ loading: true, error: null })
-    const [backups, ultimaRestauracao, versao] = await Promise.all([
+    const [backups, ultimaRestauracao, versao, configDestino] = await Promise.all([
       window.psitrack.backup.listar(),
       window.psitrack.backup.ultimaRestauracao(),
-      window.psitrack.app.getVersion()
+      window.psitrack.app.getVersion(),
+      window.psitrack.backup.obterConfigDestino()
     ])
     set({
       loading: false,
       backups: backups.ok ? backups.backups : [],
       ultimaRestauracao: ultimaRestauracao.ok ? ultimaRestauracao.registro : null,
       versao,
+      destino: configDestino.ok ? configDestino.destinoBackupExterno : null,
+      ultimoBackupExternoEm: configDestino.ok ? configDestino.ultimoBackupExternoEm : null,
       error: !backups.ok ? backups.error : null
     })
   },
 
   criarBackup: async () => {
-    set({ criando: true, error: null })
+    set({ criando: true, error: null, avisoDestino: null })
     const result = await window.psitrack.backup.criar()
     set({ criando: false })
     if (!result.ok) {
       set({ error: result.error })
       return
+    }
+    if (result.destinoOk === false) {
+      set({ avisoDestino: `Backup local criado, mas não foi possível gravar no destino externo: ${result.destinoErro ?? 'motivo desconhecido'}.` })
     }
     await get().carregar()
   },
@@ -72,5 +101,37 @@ export const useConfiguracoesStore = create<ConfiguracoesStoreState>((set, get) 
   restaurar: (pasta) => {
     set({ restaurando: pasta, error: null })
     void window.psitrack.backup.restaurar(pasta)
+  },
+
+  configurarDestino: async () => {
+    set({ configurandoDestino: true, destinoError: null })
+    const result = await window.psitrack.backup.configurarDestino()
+    set({ configurandoDestino: false })
+    if (!result.ok) {
+      set({ destinoError: result.error })
+      return
+    }
+    if (result.cancelado) return
+    set({ destino: result.destino })
+  },
+
+  removerDestino: async () => {
+    const result = await window.psitrack.backup.removerDestino()
+    if (!result.ok) {
+      set({ destinoError: result.error })
+      return
+    }
+    set({ destino: null, ultimoBackupExternoEm: null, verificacaoDestino: null })
+  },
+
+  verificarDestino: async () => {
+    set({ verificandoDestino: true })
+    const result = await window.psitrack.backup.verificarDestino()
+    set({ verificandoDestino: false })
+    if (!result.ok) {
+      set({ destinoError: result.error })
+      return
+    }
+    set({ verificacaoDestino: result.resultado })
   }
 }))

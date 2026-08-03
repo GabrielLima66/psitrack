@@ -17,6 +17,16 @@ export async function escolherArquivoParaAbrir(janela: BrowserWindow | null): Pr
   return resultado.canceled ? null : (resultado.filePaths[0] ?? null)
 }
 
+/** Pasta de destino de backup externo (Etapa 19) — mesmo hook de teste, `properties: ['openDirectory']` em vez de `openFile`. */
+export async function escolherPastaDestino(janela: BrowserWindow | null): Promise<string | null> {
+  const caminhoDeTeste = process.env.PSITRACK_TEST_DIALOG_PATH
+  if (caminhoDeTeste) return caminhoDeTeste
+
+  const opcoes = { properties: ['openDirectory' as const] }
+  const resultado = janela ? await dialog.showOpenDialog(janela, opcoes) : await dialog.showOpenDialog(opcoes)
+  return resultado.canceled ? null : (resultado.filePaths[0] ?? null)
+}
+
 export interface OpcoesSalvar {
   title?: string
   filters?: { name: string; extensions: string[] }[]
