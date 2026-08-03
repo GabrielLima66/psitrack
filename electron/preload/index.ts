@@ -424,6 +424,29 @@ export interface ConfigDestino {
   ultimoBackupExternoEm: string | null
 }
 
+/** Retenção GFS (Etapa 20, D39): 7 diários + 4 semanais + 6 mensais. */
+export interface DecisaoRetencao {
+  manter: string[]
+  purgar: string[]
+}
+
+export interface ResultadoPurga {
+  local: DecisaoRetencao
+  externo: (DecisaoRetencao & { blobsPurgadosDoPool: string[] }) | null
+}
+
+export interface PreviewCamada {
+  totalBytes: number
+  aLiberarBytes: number
+  mantidos: number
+  purgar: number
+}
+
+export interface PreviewPurga {
+  local: PreviewCamada
+  externo: (PreviewCamada & { poolTotalBytes: number; poolALiberarBytes: number }) | null
+}
+
 const api = {
   app: {
     getVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion')
@@ -577,7 +600,11 @@ const api = {
     removerDestino: (): Promise<IpcResult> => ipcRenderer.invoke('backup:removerDestino'),
     /** Reconfere o snapshot externo mais recente contra o pool. `resultado` é `null` se ainda não há nenhum snapshot externo. */
     verificarDestino: (): Promise<IpcResult<{ resultado: BackupVerificationResult | null }>> =>
-      ipcRenderer.invoke('backup:verificarDestino')
+      ipcRenderer.invoke('backup:verificarDestino'),
+    /** Dry-run: mesma decisão que uma purga de verdade tomaria, sem apagar nada. */
+    previewPurga: (): Promise<IpcResult<{ preview: PreviewPurga }>> => ipcRenderer.invoke('backup:previewPurga'),
+    /** Local sempre + externo se configurado (D39/D42). Verifica todos os retidos antes de apagar qualquer coisa — lança sem tocar em nada se algum falhar. */
+    executarPurga: (): Promise<IpcResult<{ resultado: ResultadoPurga }>> => ipcRenderer.invoke('backup:executarPurga')
   }
 }
 

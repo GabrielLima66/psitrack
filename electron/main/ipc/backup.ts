@@ -3,6 +3,7 @@ import { escolherPastaDestino } from '../anexos/dialogos'
 import { criarBackupComDestino, gravarConfig, lerConfig, validarDestino, verificarSnapshotExterno } from '../backup/destinos'
 import { listarBackups, restaurarBackupComSeguranca, verificarBackup } from '../backup/gerenciador'
 import { lerUltimaRestauracao } from '../backup/registroRestauracao'
+import { executarPurga, previewPurga } from '../backup/retencao'
 import type { KeySession } from '../crypto/session'
 import { getAnexosDir, getBackupsDir, getConfigPath, getDbPath, getKeysFilePath, getMigrationsFolder } from '../paths'
 import { safely } from './result'
@@ -64,6 +65,20 @@ export function registerBackupHandlers(session: KeySession): void {
   )
 
   ipcMain.handle('backup:ultimaRestauracao', () => safely(() => ({ registro: lerUltimaRestauracao(getBackupsDir()) })))
+
+  ipcMain.handle('backup:previewPurga', () =>
+    safely(() => ({ preview: previewPurga(getBackupsDir(), lerConfig(getConfigPath()).destinoBackupExterno) }))
+  )
+
+  ipcMain.handle('backup:executarPurga', () =>
+    safely(() => ({
+      resultado: executarPurga({
+        backupDir: getBackupsDir(),
+        destino: lerConfig(getConfigPath()).destinoBackupExterno,
+        dek: session.getDek()
+      })
+    }))
+  )
 
   // Depois de restaurar com sucesso, o app fecha e reabre sozinho — todo
   // estado em memória (stores do renderer, sessão, conexão de banco) parte

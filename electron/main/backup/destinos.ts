@@ -39,7 +39,8 @@ export function validarDestino(destino: string, userDataDir: string): void {
   }
 }
 
-function pastaPool(destino: string): string {
+/** Exportada pra `retencao.ts` escanear o pool na hora de purgar blob órfão. */
+export function pastaPool(destino: string): string {
   return join(destino, 'psitrack', 'blobs')
 }
 
@@ -109,7 +110,8 @@ function nomeArquivoSeguro(): string {
   return new Date().toISOString().replace(/[:.]/g, '-')
 }
 
-function pastaSnapshots(destino: string): string {
+/** Exportada pra `retencao.ts` computar o caminho de uma pasta de snapshot específica sem duplicar a convenção. */
+export function pastaSnapshots(destino: string): string {
   return join(destino, 'psitrack', 'snapshots')
 }
 
@@ -162,34 +164,35 @@ export function escreverBackupExterno(opts: EscreverBackupExternoOptions): Backu
   return manifest
 }
 
-/** Snapshot externo mais recente (pelo `createdAt` do manifesto), ou `null` se ainda não há nenhum. */
-function obterSnapshotExternoMaisRecente(destino: string): { pasta: string; manifest: BackupManifest } | null {
+/** Todos os snapshots externos (com manifest.json), do mais novo pro mais velho — pasta incompleta (sem manifesto ainda) é ignorada, mesma regra de `listarBackups`. */
+export function listarSnapshotsExternos(destino: string): { pasta: string; manifest: BackupManifest }[] {
   const dir = pastaSnapshots(destino)
-  if (!existsSync(dir)) return null
+  if (!existsSync(dir)) return []
 
-  let maisRecente: { pasta: string; manifest: BackupManifest } | null = null
+  const resultado: { pasta: string; manifest: BackupManifest }[] = []
   for (const entrada of readdirSync(dir, { withFileTypes: true })) {
     if (!entrada.isDirectory()) continue
     const manifestPath = join(dir, entrada.name, 'manifest.json')
     if (!existsSync(manifestPath)) continue
-    const manifest = readManifest(manifestPath)
-    if (!maisRecente || manifest.createdAt > maisRecente.manifest.createdAt) {
-      maisRecente = { pasta: entrada.name, manifest }
-    }
+    resultado.push({ pasta: entrada.name, manifest: readManifest(manifestPath) })
   }
-  return maisRecente
+  return resultado.sort((a, b) => b.manifest.createdAt.localeCompare(a.manifest.createdAt))
+}
+
+/** Reconfere um snapshot externo específico contra o pool — usado tanto pelo "Verificar" avulso (o mais recente) quanto pela purga (todos os retidos, Etapa 20). */
+export function verificarSnapshotExternoPorPasta(destino: string, pasta: string, dek: Buffer): VerificationResult {
+  const manifest = readManifest(join(pastaSnapshots(destino), pasta, 'manifest.json'))
+  const dbPath = join(pastaSnapshots(destino), pasta, 'banco.db')
+  const integridade = verificarIntegridadeArquivo(dbPath, dek, manifest.verification.rowCounts)
+  const blobs = verificarPool(manifest.blobs.entries, destino)
+  return montarVerificationResult(integridade, blobs)
 }
 
 /** "Verificar" avulso do destino externo (critério de aceite da Etapa 19) — re-checa o snapshot mais recente contra o pool, sem restaurar nada. */
 export function verificarSnapshotExterno(destino: string, dek: Buffer): VerificationResult | null {
-  const maisRecente = obterSnapshotExternoMaisRecente(destino)
+  const [maisRecente] = listarSnapshotsExternos(destino)
   if (!maisRecente) return null
-
-  const dbPath = join(pastaSnapshots(destino), maisRecente.pasta, 'banco.db')
-  const integridade = verificarIntegridadeArquivo(dbPath, dek, maisRecente.manifest.verification.rowCounts)
-  const blobs = verificarPool(maisRecente.manifest.blobs.entries, destino)
-
-  return montarVerificationResult(integridade, blobs)
+  return verificarSnapshotExternoPorPasta(destino, maisRecente.pasta, dek)
 }
 
 export interface CriarBackupComDestinoOptions {

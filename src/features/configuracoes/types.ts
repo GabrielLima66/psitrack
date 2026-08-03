@@ -45,3 +45,26 @@ export interface ConfigDestino {
   destinoBackupExterno: string | null
   ultimoBackupExternoEm: string | null
 }
+
+/** Retenção GFS (Etapa 20, D39): 7 diários + 4 semanais + 6 mensais. */
+export interface DecisaoRetencao {
+  manter: string[]
+  purgar: string[]
+}
+
+export interface ResultadoPurga {
+  local: DecisaoRetencao
+  externo: (DecisaoRetencao & { blobsPurgadosDoPool: string[] }) | null
+}
+
+export interface PreviewCamada {
+  totalBytes: number
+  aLiberarBytes: number
+  mantidos: number
+  purgar: number
+}
+
+export interface PreviewPurga {
+  local: PreviewCamada
+  externo: (PreviewCamada & { poolTotalBytes: number; poolALiberarBytes: number }) | null
+}

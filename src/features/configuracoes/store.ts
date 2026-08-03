@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { BackupListado, BackupVerificationResult, RegistroRestauracao } from './types'
+import type { BackupListado, BackupVerificationResult, PreviewPurga, RegistroRestauracao, ResultadoPurga } from './types'
 
 interface ConfiguracoesStoreState {
   backups: BackupListado[]
@@ -23,6 +23,13 @@ interface ConfiguracoesStoreState {
   verificacaoDestino: BackupVerificationResult | null
   verificandoDestino: boolean
 
+  // Retenção/purga (Etapa 20) — dry-run carregado junto com o resto da
+  // tela; `ultimaPurga` só existe depois de um "Purgar agora" nesta sessão.
+  previewPurga: PreviewPurga | null
+  purgando: boolean
+  purgaError: string | null
+  ultimaPurga: ResultadoPurga | null
+
   carregar: () => Promise<void>
   criarBackup: () => Promise<void>
   verificar: (pasta: string) => Promise<void>
@@ -31,6 +38,8 @@ interface ConfiguracoesStoreState {
   configurarDestino: () => Promise<void>
   removerDestino: () => Promise<void>
   verificarDestino: () => Promise<void>
+
+  executarPurga: () => Promise<void>
 }
 
 export const useConfiguracoesStore = create<ConfiguracoesStoreState>((set, get) => ({
@@ -52,13 +61,19 @@ export const useConfiguracoesStore = create<ConfiguracoesStoreState>((set, get) 
   verificacaoDestino: null,
   verificandoDestino: false,
 
+  previewPurga: null,
+  purgando: false,
+  purgaError: null,
+  ultimaPurga: null,
+
   carregar: async () => {
     set({ loading: true, error: null })
-    const [backups, ultimaRestauracao, versao, configDestino] = await Promise.all([
+    const [backups, ultimaRestauracao, versao, configDestino, preview] = await Promise.all([
       window.psitrack.backup.listar(),
       window.psitrack.backup.ultimaRestauracao(),
       window.psitrack.app.getVersion(),
-      window.psitrack.backup.obterConfigDestino()
+      window.psitrack.backup.obterConfigDestino(),
+      window.psitrack.backup.previewPurga()
     ])
     set({
       loading: false,
@@ -67,6 +82,7 @@ export const useConfiguracoesStore = create<ConfiguracoesStoreState>((set, get) 
       versao,
       destino: configDestino.ok ? configDestino.destinoBackupExterno : null,
       ultimoBackupExternoEm: configDestino.ok ? configDestino.ultimoBackupExternoEm : null,
+      previewPurga: preview.ok ? preview.preview : null,
       error: !backups.ok ? backups.error : null
     })
   },
@@ -133,5 +149,17 @@ export const useConfiguracoesStore = create<ConfiguracoesStoreState>((set, get) 
       return
     }
     set({ verificacaoDestino: result.resultado })
+  },
+
+  executarPurga: async () => {
+    set({ purgando: true, purgaError: null })
+    const result = await window.psitrack.backup.executarPurga()
+    set({ purgando: false })
+    if (!result.ok) {
+      set({ purgaError: result.error })
+      return
+    }
+    set({ ultimaPurga: result.resultado })
+    await get().carregar()
   }
 }))
