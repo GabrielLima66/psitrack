@@ -4,7 +4,7 @@ import { BackupItem } from './BackupItem'
 import { formatarDataHoraBr } from './formatters'
 import { useConfiguracoesStore } from './store'
 
-/** Tela "Configurações" (Etapa 17): backup manual local e restore, com snapshot de segurança automático antes de sobrescrever. */
+/** Tela "Configurações" (Etapas 17-18): backup manual local e restore, com snapshot de segurança automático antes de sobrescrever, e informações do app. */
 export function ConfiguracoesScreen() {
   const store = useConfiguracoesStore()
 
@@ -53,6 +53,11 @@ export function ConfiguracoesScreen() {
             onRestaurar={() => store.restaurar(backup.pasta)}
           />
         ))}
+      </div>
+
+      <div className="rounded-lg border border-border p-4">
+        <h2 className="text-sm font-semibold text-foreground">Sobre</h2>
+        <p className="text-xs text-muted-foreground">PsiTrack{store.versao ? ` · versão ${store.versao}` : ''}</p>
       </div>
     </div>
   )

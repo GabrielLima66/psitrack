@@ -10,6 +10,7 @@ interface ConfiguracoesStoreState {
   verificandoBusy: string | null
   restaurando: string | null
   ultimaRestauracao: RegistroRestauracao | null
+  versao: string | null
 
   carregar: () => Promise<void>
   criarBackup: () => Promise<void>
@@ -26,17 +27,20 @@ export const useConfiguracoesStore = create<ConfiguracoesStoreState>((set, get) 
   verificandoBusy: null,
   restaurando: null,
   ultimaRestauracao: null,
+  versao: null,
 
   carregar: async () => {
     set({ loading: true, error: null })
-    const [backups, ultimaRestauracao] = await Promise.all([
+    const [backups, ultimaRestauracao, versao] = await Promise.all([
       window.psitrack.backup.listar(),
-      window.psitrack.backup.ultimaRestauracao()
+      window.psitrack.backup.ultimaRestauracao(),
+      window.psitrack.app.getVersion()
     ])
     set({
       loading: false,
       backups: backups.ok ? backups.backups : [],
       ultimaRestauracao: ultimaRestauracao.ok ? ultimaRestauracao.registro : null,
+      versao,
       error: !backups.ok ? backups.error : null
     })
   },

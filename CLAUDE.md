@@ -47,6 +47,8 @@ Estas regras não são negociáveis. Se uma tarefa parecer exigir violar alguma,
    evolução não pode travar no meio). Ao travar, zera a DEK da memória.
 7. **Sem rede.** Sem telemetria, sem auto-update, sem CDN. Fontes e ícones no bundle.
    Não adicione dependência que faça request em runtime.
+8. **Log e diagnóstico nunca contêm conteúdo clínico nem dado identificável.** Nem nome
+   de paciente, nem texto de evolução, nem CPF, nem nome original de anexo.
 
 ---
 
