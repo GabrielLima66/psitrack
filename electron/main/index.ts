@@ -1,5 +1,7 @@
 import { app, BrowserWindow, powerMonitor, shell } from 'electron'
 import { join } from 'node:path'
+import { backupAutomaticoEmAndamento, foiPularFechamentoSolicitado, resetarPularFechamento } from './backup/estado'
+import { dispararBackupAutomaticoSeNecessario } from './backup/scheduler'
 import { registerAgendaHandlers } from './ipc/agenda'
 import { registerAnexosHandlers } from './ipc/anexos'
 import { registerAnotacoesHandlers } from './ipc/anotacoes'
@@ -8,11 +10,15 @@ import { registerBackupHandlers } from './ipc/backup'
 import { registerEvolucaoHandlers } from './ipc/evolucao'
 import { registerFinanceiroHandlers } from './ipc/financeiro'
 import { registerPacientesHandlers } from './ipc/pacientes'
-import { registerVaultHandlers } from './ipc/vault'
+import { getDb, registerVaultHandlers } from './ipc/vault'
 import { KeySession } from './crypto/session'
 import { startAutoLock } from './crypto/idle-lock'
+import { getAnexosDir, getBackupsDir, getConfigPath, getKeysFilePath } from './paths'
 
 const session = new KeySession()
+
+/** Janela de reação real pra clicar "Pular" no overlay de fechamento (Etapa 21) — depois disso, o backup síncrono já começou e não tem mais como interromper. */
+const JANELA_PULAR_FECHAMENTO_MS = 1000
 
 // Nome explícito: define %APPDATA%/PsiTrack/ como diretório de userData,
 // independente de como o processo foi iniciado (dev via `electron .` ou empacotado).
@@ -72,6 +78,10 @@ app.whenReady().then(() => {
   startAutoLock({
     getIdleSeconds: () => powerMonitor.getSystemIdleTime(),
     onLock: () => {
+      // Etapa 21: nunca zera a DEK enquanto um backup automático estiver
+      // rodando (ele precisa dela). Não interrompe nada em andamento — só
+      // adia o lock pro próximo tick do poll, que vai reavaliar sozinho.
+      if (backupAutomaticoEmAndamento()) return
       session.lock()
       for (const window of BrowserWindow.getAllWindows()) {
         window.webContents.send('vault:locked')
@@ -88,4 +98,48 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+let podeSairMesmo = false
+
+/**
+ * Gatilho "ao fechar" do scheduler (D40/Etapa 21): só dispara se houve
+ * escrita nesta sessão (`exigirEscritaNaSessao`) e o cofre está
+ * desbloqueado. Dá ~1s de janela real pra "Pular" antes de rodar o backup
+ * de verdade — depois disso é síncrono e bloqueia a thread até terminar,
+ * então "Pular" nesse ponto não teria mais efeito (aceito, ver plano da
+ * Etapa 21: banco de usuária única é pequeno).
+ */
+app.on('before-quit', (event) => {
+  if (podeSairMesmo) return
+  if (!session.isUnlocked) return // cofre já travado, nada pra fazer, deixa fechar normal
+
+  event.preventDefault()
+  resetarPularFechamento()
+  for (const window of BrowserWindow.getAllWindows()) {
+    window.webContents.send('backup:antesDeFechar')
+  }
+
+  setTimeout(() => {
+    if (!foiPularFechamentoSolicitado()) {
+      dispararBackupAutomaticoSeNecessario({
+        db: getDb(),
+        dek: session.getDek(),
+        backupDir: getBackupsDir(),
+        anexosDir: getAnexosDir(),
+        keysFilePath: getKeysFilePath(),
+        configPath: getConfigPath(),
+        historicoPath: join(getBackupsDir(), 'historico-automatico.json'),
+        gatilho: 'fechar',
+        exigirEscritaNaSessao: true,
+        onResultado: (execucao) => {
+          for (const window of BrowserWindow.getAllWindows()) {
+            window.webContents.send('backup:automaticoResultado', execucao)
+          }
+        }
+      })
+    }
+    podeSairMesmo = true
+    app.exit(0)
+  }, JANELA_PULAR_FECHAMENTO_MS)
 })

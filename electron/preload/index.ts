@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 
 /**
  * Superfície exposta ao renderer. Só DTOs simples cruzam essa fronteira —
@@ -447,6 +447,15 @@ export interface PreviewPurga {
   externo: (PreviewCamada & { poolTotalBytes: number; poolALiberarBytes: number }) | null
 }
 
+/** Scheduler automático (Etapa 21, D40): registro de cada execução automática, local ou ao fechar. */
+export interface ExecucaoBackupAutomatico {
+  executadoEm: string
+  gatilho: 'destrancar' | 'fechar'
+  localOk: boolean
+  destinoOk: boolean | null
+  erro?: string
+}
+
 const api = {
   app: {
     getVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion')
@@ -604,7 +613,22 @@ const api = {
     /** Dry-run: mesma decisão que uma purga de verdade tomaria, sem apagar nada. */
     previewPurga: (): Promise<IpcResult<{ preview: PreviewPurga }>> => ipcRenderer.invoke('backup:previewPurga'),
     /** Local sempre + externo se configurado (D39/D42). Verifica todos os retidos antes de apagar qualquer coisa — lança sem tocar em nada se algum falhar. */
-    executarPurga: (): Promise<IpcResult<{ resultado: ResultadoPurga }>> => ipcRenderer.invoke('backup:executarPurga')
+    executarPurga: (): Promise<IpcResult<{ resultado: ResultadoPurga }>> => ipcRenderer.invoke('backup:executarPurga'),
+    historico: (): Promise<IpcResult<{ historico: ExecucaoBackupAutomatico[] }>> => ipcRenderer.invoke('backup:historico'),
+    /** Só tem efeito real se chegar antes do backup automático de fechamento começar a rodar (I/O síncrono, ver Etapa 21). */
+    pularFechamento: (): Promise<IpcResult> => ipcRenderer.invoke('backup:pularFechamento'),
+    /** Disparado pelo main quando um backup automático (destrancar ou fechar) termina, com ou sem sucesso. */
+    onResultadoAutomatico: (callback: (execucao: ExecucaoBackupAutomatico) => void): (() => void) => {
+      const listener = (_event: IpcRendererEvent, execucao: ExecucaoBackupAutomatico): void => callback(execucao)
+      ipcRenderer.on('backup:automaticoResultado', listener)
+      return () => ipcRenderer.removeListener('backup:automaticoResultado', listener)
+    },
+    /** Disparado pelo main ao tentar fechar o app com escrita pendente — janela real de ~1s pra "Pular" antes do backup começar. */
+    onAntesDeFechar: (callback: () => void): (() => void) => {
+      const listener = (): void => callback()
+      ipcRenderer.on('backup:antesDeFechar', listener)
+      return () => ipcRenderer.removeListener('backup:antesDeFechar', listener)
+    }
   }
 }
 

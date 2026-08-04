@@ -1,7 +1,10 @@
+import { join } from 'node:path'
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { escolherPastaDestino } from '../anexos/dialogos'
 import { criarBackupComDestino, gravarConfig, lerConfig, validarDestino, verificarSnapshotExterno } from '../backup/destinos'
+import { solicitarPularFechamento } from '../backup/estado'
 import { listarBackups, restaurarBackupComSeguranca, verificarBackup } from '../backup/gerenciador'
+import { lerHistorico } from '../backup/historico'
 import { lerUltimaRestauracao } from '../backup/registroRestauracao'
 import { executarPurga, previewPurga } from '../backup/retencao'
 import type { KeySession } from '../crypto/session'
@@ -9,7 +12,7 @@ import { getAnexosDir, getBackupsDir, getConfigPath, getDbPath, getKeysFilePath,
 import { safely } from './result'
 import { closeDb, getDb } from './vault'
 
-/** Handlers da tela de Configurações — Etapas 17-19 (SPEC-fase-3.md/SPEC-fase-4.md): backup manual local + destino externo, listagem, verificação e restore. */
+/** Handlers da tela de Configurações — Etapas 17-21 (SPEC-fase-3.md/SPEC-fase-4.md): backup manual local + destino externo, listagem, verificação, restore e scheduler automático. */
 export function registerBackupHandlers(session: KeySession): void {
   ipcMain.handle('backup:listar', () => safely(() => ({ backups: listarBackups(getBackupsDir()) })))
 
@@ -65,6 +68,19 @@ export function registerBackupHandlers(session: KeySession): void {
   )
 
   ipcMain.handle('backup:ultimaRestauracao', () => safely(() => ({ registro: lerUltimaRestauracao(getBackupsDir()) })))
+
+  ipcMain.handle('backup:historico', () =>
+    safely(() => ({ historico: lerHistorico(join(getBackupsDir(), 'historico-automatico.json')) }))
+  )
+
+  // "Pular" no overlay de fechamento (Etapa 21) — só tem efeito real se
+  // chegar antes do backup automático começar a rodar (I/O síncrono).
+  ipcMain.handle('backup:pularFechamento', () =>
+    safely(() => {
+      solicitarPularFechamento()
+      return {}
+    })
+  )
 
   ipcMain.handle('backup:previewPurga', () =>
     safely(() => ({ preview: previewPurga(getBackupsDir(), lerConfig(getConfigPath()).destinoBackupExterno) }))

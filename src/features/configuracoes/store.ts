@@ -1,5 +1,12 @@
 import { create } from 'zustand'
-import type { BackupListado, BackupVerificationResult, PreviewPurga, RegistroRestauracao, ResultadoPurga } from './types'
+import type {
+  BackupListado,
+  BackupVerificationResult,
+  ExecucaoBackupAutomatico,
+  PreviewPurga,
+  RegistroRestauracao,
+  ResultadoPurga
+} from './types'
 
 interface ConfiguracoesStoreState {
   backups: BackupListado[]
@@ -30,6 +37,16 @@ interface ConfiguracoesStoreState {
   purgaError: string | null
   ultimaPurga: ResultadoPurga | null
 
+  // Scheduler automático (Etapa 21) — assinado uma vez a nível de App.tsx
+  // (mesmo padrão de vault.onLocked em VaultFlow.tsx), mas o estado mora
+  // aqui porque a tela de Configurações é quem mostra o histórico.
+  historico: ExecucaoBackupAutomatico[]
+  // D41: "nunca silenciosa" — só some com dispensarAvisoBackupAutomatico,
+  // nunca sozinho, por isso não é um `error` comum (que a UI já trata como
+  // transitório).
+  avisoBackupAutomatico: ExecucaoBackupAutomatico | null
+  fechandoComBackup: boolean
+
   carregar: () => Promise<void>
   criarBackup: () => Promise<void>
   verificar: (pasta: string) => Promise<void>
@@ -40,6 +57,11 @@ interface ConfiguracoesStoreState {
   verificarDestino: () => Promise<void>
 
   executarPurga: () => Promise<void>
+
+  registrarResultadoAutomatico: (execucao: ExecucaoBackupAutomatico) => void
+  dispensarAvisoBackupAutomatico: () => void
+  mostrarOverlayFechamento: () => void
+  pularFechamento: () => Promise<void>
 }
 
 export const useConfiguracoesStore = create<ConfiguracoesStoreState>((set, get) => ({
@@ -66,14 +88,19 @@ export const useConfiguracoesStore = create<ConfiguracoesStoreState>((set, get) 
   purgaError: null,
   ultimaPurga: null,
 
+  historico: [],
+  avisoBackupAutomatico: null,
+  fechandoComBackup: false,
+
   carregar: async () => {
     set({ loading: true, error: null })
-    const [backups, ultimaRestauracao, versao, configDestino, preview] = await Promise.all([
+    const [backups, ultimaRestauracao, versao, configDestino, preview, historico] = await Promise.all([
       window.psitrack.backup.listar(),
       window.psitrack.backup.ultimaRestauracao(),
       window.psitrack.app.getVersion(),
       window.psitrack.backup.obterConfigDestino(),
-      window.psitrack.backup.previewPurga()
+      window.psitrack.backup.previewPurga(),
+      window.psitrack.backup.historico()
     ])
     set({
       loading: false,
@@ -83,6 +110,7 @@ export const useConfiguracoesStore = create<ConfiguracoesStoreState>((set, get) 
       destino: configDestino.ok ? configDestino.destinoBackupExterno : null,
       ultimoBackupExternoEm: configDestino.ok ? configDestino.ultimoBackupExternoEm : null,
       previewPurga: preview.ok ? preview.preview : null,
+      historico: historico.ok ? historico.historico : [],
       error: !backups.ok ? backups.error : null
     })
   },
@@ -161,5 +189,26 @@ export const useConfiguracoesStore = create<ConfiguracoesStoreState>((set, get) 
     }
     set({ ultimaPurga: result.resultado })
     await get().carregar()
+  },
+
+  // Chamada pelo listener assinado em App.tsx (window.psitrack.backup.onResultadoAutomatico).
+  registrarResultadoAutomatico: (execucao) => {
+    set((state) => ({
+      historico: [execucao, ...state.historico].slice(0, 10),
+      fechandoComBackup: false,
+      // D41: falha (total ou parcial no destino) vira aviso persistente —
+      // sucesso completo não precisa incomodar ninguém.
+      avisoBackupAutomatico: !execucao.localOk || execucao.destinoOk === false ? execucao : state.avisoBackupAutomatico
+    }))
+  },
+
+  dispensarAvisoBackupAutomatico: () => set({ avisoBackupAutomatico: null }),
+
+  // Chamada pelo listener de window.psitrack.backup.onAntesDeFechar.
+  mostrarOverlayFechamento: () => set({ fechandoComBackup: true }),
+
+  pularFechamento: async () => {
+    set({ fechandoComBackup: false })
+    await window.psitrack.backup.pularFechamento()
   }
 }))

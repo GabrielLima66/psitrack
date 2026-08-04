@@ -68,3 +68,12 @@ export interface PreviewPurga {
   local: PreviewCamada
   externo: (PreviewCamada & { poolTotalBytes: number; poolALiberarBytes: number }) | null
 }
+
+/** Scheduler automático (Etapa 21, D40): registro de cada execução automática, local ou ao fechar. */
+export interface ExecucaoBackupAutomatico {
+  executadoEm: string
+  gatilho: 'destrancar' | 'fechar'
+  localOk: boolean
+  destinoOk: boolean | null
+  erro?: string
+}

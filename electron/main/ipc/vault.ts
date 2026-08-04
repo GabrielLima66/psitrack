@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs'
-import { ipcMain } from 'electron'
+import { join } from 'node:path'
+import { BrowserWindow, ipcMain } from 'electron'
 import {
   createKeysFile,
   readKeysFile,
@@ -12,8 +13,10 @@ import { decodeRecoveryKey, encodeRecoveryKey, formatRecoveryKeyForDisplay } fro
 import type { KeySession } from '../crypto/session'
 import { openDatabase, type PsiTrackDatabase } from '../db/connection'
 import { materializarTodasRecorrencias } from '../db/repositories/sessao'
-import { getAnexosDir, getBackupsDir, getDbPath, getKeysFilePath, getMigrationsFolder } from '../paths'
+import { getAnexosDir, getBackupsDir, getConfigPath, getDbPath, getKeysFilePath, getMigrationsFolder } from '../paths'
 import { migrarComSeguranca } from '../backup/pre-migration'
+import { definirBaselineEscritas } from '../backup/estado'
+import { dispararBackupAutomaticoSeNecessario, totalChangesAtual } from '../backup/scheduler'
 import { safely } from './result'
 
 let db: PsiTrackDatabase | null = null
@@ -38,6 +41,38 @@ function openAndMigrate(dek: Buffer): void {
   // "Materialização de 12 semanas na abertura do app" (SPEC-fase-2.md
   // Etapa 11) — idempotente, estende cada recorrência ativa sem duplicar.
   materializarTodasRecorrencias(db)
+  // Baseline do scheduler automático (Etapa 21): capturada só AGORA, depois
+  // da migração/materialização já terem escrito — sem isso, `total_changes()`
+  // contaria essas escritas automáticas como "a usuária editou algo".
+  definirBaselineEscritas(totalChangesAtual(db))
+}
+
+/**
+ * Gatilho "ao destrancar" do scheduler (D40/Etapa 21) — roda depois da
+ * resposta do `vault:unlock`/`vault:unlockWithRecovery` já ter voltado pro
+ * renderer (`setImmediate`), então não atrasa a tela de Pacientes aparecer.
+ * `vault:create` nunca chama isto — cofre recém-criado não tem o que valer
+ * a pena backupear ainda.
+ */
+function agendarBackupAutomaticoPosDesbloqueio(session: KeySession): void {
+  setImmediate(() => {
+    dispararBackupAutomaticoSeNecessario({
+      db: getDb(),
+      dek: session.getDek(),
+      backupDir: getBackupsDir(),
+      anexosDir: getAnexosDir(),
+      keysFilePath: getKeysFilePath(),
+      configPath: getConfigPath(),
+      historicoPath: join(getBackupsDir(), 'historico-automatico.json'),
+      gatilho: 'destrancar',
+      exigirEscritaNaSessao: false,
+      onResultado: (execucao) => {
+        for (const window of BrowserWindow.getAllWindows()) {
+          window.webContents.send('backup:automaticoResultado', execucao)
+        }
+      }
+    })
+  })
 }
 
 /** Handlers do domínio "vault": senha mestra, recovery key, auto-lock. */
@@ -62,6 +97,7 @@ export function registerVaultHandlers(session: KeySession): void {
       const dek = await unwrapWithPassword(keysFile, password)
       openAndMigrate(dek)
       session.unlock(dek)
+      agendarBackupAutomaticoPosDesbloqueio(session)
       return {}
     })
   )
@@ -73,6 +109,7 @@ export function registerVaultHandlers(session: KeySession): void {
       const dek = unwrapWithRecovery(keysFile, recoveryKey)
       openAndMigrate(dek)
       session.unlock(dek)
+      agendarBackupAutomaticoPosDesbloqueio(session)
       return {}
     })
   )

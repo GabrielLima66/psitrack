@@ -3,10 +3,11 @@ import { Button } from '@/components/ui/button'
 import { BackupItem } from './BackupItem'
 import { DestinoBackupSection } from './DestinoBackupSection'
 import { formatarDataHoraBr } from './formatters'
+import { HistoricoAutomaticoSection } from './HistoricoAutomaticoSection'
 import { RetencaoSection } from './RetencaoSection'
 import { useConfiguracoesStore } from './store'
 
-/** Tela "Configurações" (Etapas 17-20): backup manual local + destino externo, retenção/purga e restore, com snapshot de segurança automático antes de sobrescrever, e informações do app. */
+/** Tela "Configurações" (Etapas 17-21): backup manual local + destino externo, retenção/purga, restore e scheduler automático, com snapshot de segurança automático antes de sobrescrever, e informações do app. */
 export function ConfiguracoesScreen() {
   const store = useConfiguracoesStore()
 
@@ -62,6 +63,8 @@ export function ConfiguracoesScreen() {
         ultimaPurga={store.ultimaPurga}
         onPurgar={() => void store.executarPurga()}
       />
+
+      <HistoricoAutomaticoSection historico={store.historico} />
 
       <div className="flex flex-col gap-2">
         {store.loading && <p className="text-sm text-muted-foreground">Carregando…</p>}

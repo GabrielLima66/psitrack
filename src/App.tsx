@@ -1,6 +1,7 @@
 import { Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AgendaScreen } from '@/features/agenda/AgendaScreen'
+import { BackupAutomaticoOverlay } from '@/features/configuracoes/BackupAutomaticoOverlay'
 import { ConfiguracoesScreen } from '@/features/configuracoes/ConfiguracoesScreen'
 import { PacientesFlow } from '@/features/pacientes/PacientesFlow'
 import { AReceberScreen } from '@/features/receber/AReceberScreen'
@@ -37,6 +38,7 @@ function App() {
     <VaultFlow>
       <div className="flex h-screen flex-col">
         <NavegacaoTopo />
+        <BackupAutomaticoOverlay />
         <div className="min-h-0 flex-1 overflow-hidden">
           {area === 'agenda' ? (
             <AgendaScreen />
