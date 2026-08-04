@@ -1,10 +1,10 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { ChevronLeft, ChevronRight, Clock } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { formatarDataCurta, formatarDiaSemanaAbrev, formatarHoraLocal, formatarIntervaloDatas } from './formatters'
-import { alturaGrade, posY, rotulosHora } from './grade'
+import { alturaTotal, COPIAS, posYCiclico, rotulosHora, scrollInicial, scrollRealocado } from './grade'
 import { NovaSessaoForm } from './NovaSessaoForm'
 import { PainelSessao } from './PainelSessao'
 import { SessaoCard } from './SessaoCard'
@@ -23,11 +23,35 @@ import { diaSemanaLocal, hojeLocal, inicioDaSemana, somarDias, utcParaDataLocal 
 export function AgendaScreen() {
   const store = useAgendaStore()
   const [agoraHHMM, setAgoraHHMM] = useState(() => formatarHoraLocal(new Date().toISOString()))
+  const gradeRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     void store.carregar()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // A grade rola em loop (pedido do usuário: passar de 23h continua em 00h
+  // do mesmo dia, sem parar) — pousa na cópia do meio, perto do horário
+  // comercial, senão a tela abriria em 00:00 exigindo scroll manual toda vez.
+  useEffect(() => {
+    if (gradeRef.current) gradeRef.current.scrollTop = scrollInicial()
+  }, [])
+
+  function handleScrollLoop(): void {
+    const el = gradeRef.current
+    if (!el) return
+    const realocado = scrollRealocado(el.scrollTop)
+    if (realocado !== null) el.scrollTop = realocado
+  }
+
+  // Com o rolamento infinito é fácil descer demais e perder onde estava —
+  // este botão retoma exatamente no horário vigente (com uma folga de 80px
+  // acima, pra "agora" não colar na borda de cima da grade).
+  function handleIrParaAgora(): void {
+    if (!diasVisiveis.includes(hoje)) store.irParaHoje()
+    const el = gradeRef.current
+    if (el) el.scrollTop = posYCiclico(agoraHHMM, Math.floor(COPIAS / 2)) - 80
+  }
 
   useEffect(() => {
     const id = setInterval(() => setAgoraHHMM(formatarHoraLocal(new Date().toISOString())), 60_000)
@@ -40,7 +64,8 @@ export function AgendaScreen() {
   const hoje = hojeLocal()
   const semanaContemHoje = diasVisiveis.includes(hoje)
   const rotulos = rotulosHora()
-  const altura = alturaGrade()
+  const altura = alturaTotal()
+  const copias = Array.from({ length: COPIAS }, (_, i) => i)
 
   function sessoesDoDia(dataYMD: string) {
     return store.sessoes.filter((s) => utcParaDataLocal(s.inicioUtc) === dataYMD)
@@ -100,6 +125,11 @@ export function AgendaScreen() {
               </button>
             </div>
 
+            <Button type="button" variant="outline" className="h-[34px]" onClick={handleIrParaAgora}>
+              <Clock className="size-[14px]" />
+              Agora
+            </Button>
+
             <Button type="button" className="h-[34px]" onClick={() => void store.abrirNovaSessao()}>
               Nova sessão avulsa
             </Button>
@@ -114,20 +144,22 @@ export function AgendaScreen() {
         )}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto rounded-[0.625rem] border border-border">
+      <div ref={gradeRef} onScroll={handleScrollLoop} className="min-h-0 flex-1 overflow-y-auto rounded-[0.625rem] border border-border">
         <div className="flex">
           <div className="sticky left-0 z-10 w-[58px] shrink-0 border-r border-border bg-card">
             <div className="sticky top-0 z-20 h-[42px] border-b border-border bg-muted" />
             <div className="relative" style={{ height: altura }}>
-              {rotulos.map((rotulo, i) => (
-                <span
-                  key={rotulo}
-                  className="absolute right-[9px] font-mono text-[11px] text-muted-foreground"
-                  style={{ top: i * 48 + 8 - 6 }}
-                >
-                  {rotulo}
-                </span>
-              ))}
+              {copias.flatMap((copia) =>
+                rotulos.map((rotulo) => (
+                  <span
+                    key={`${copia}-${rotulo}`}
+                    className="absolute right-[9px] font-mono text-[11px] text-muted-foreground"
+                    style={{ top: posYCiclico(rotulo, copia) - 6 }}
+                  >
+                    {rotulo}
+                  </span>
+                ))
+              )}
             </div>
           </div>
 
@@ -147,30 +179,39 @@ export function AgendaScreen() {
                   </div>
 
                   <div className={cn('relative', ehHoje && 'bg-muted/40')} style={{ minHeight: altura }}>
-                    {rotulos.map((rotulo, i) => (
-                      <div key={rotulo} className="absolute right-0 left-0 h-px bg-border" style={{ top: i * 48 + 8 }} />
-                    ))}
-
-                    {ehHoje && semanaContemHoje && (
-                      <>
-                        <div className="pointer-events-none absolute right-0 left-0 z-[3] h-0.5 bg-primary" style={{ top: posY(agoraHHMM) }} />
-                        <div
-                          className="pointer-events-none absolute z-[4] size-[7px] rounded-full bg-primary"
-                          style={{ top: posY(agoraHHMM) - 3, left: -3 }}
-                        />
-                      </>
+                    {copias.flatMap((copia) =>
+                      rotulos.map((rotulo) => (
+                        <div key={`${copia}-${rotulo}`} className="absolute right-0 left-0 h-px bg-border" style={{ top: posYCiclico(rotulo, copia) }} />
+                      ))
                     )}
 
-                    {sessoesDoDia(dia).map((sessao) => (
-                      <SessaoCard
-                        key={sessao.id}
-                        sessao={sessao}
-                        selecionada={sessao.id === store.sessaoSelecionadaId}
-                        onSelecionar={() => store.selecionarSessao(sessao.id)}
-                        top={posY(formatarHoraLocal(sessao.inicioUtc))}
-                        height={Math.max((sessao.duracaoMin / 60) * 48 - 3, 18)}
-                      />
-                    ))}
+                    {ehHoje &&
+                      semanaContemHoje &&
+                      copias.map((copia) => (
+                        <div key={copia}>
+                          <div
+                            className="pointer-events-none absolute right-0 left-0 z-[3] h-0.5 bg-primary"
+                            style={{ top: posYCiclico(agoraHHMM, copia) }}
+                          />
+                          <div
+                            className="pointer-events-none absolute z-[4] size-[7px] rounded-full bg-primary"
+                            style={{ top: posYCiclico(agoraHHMM, copia) - 3, left: -3 }}
+                          />
+                        </div>
+                      ))}
+
+                    {sessoesDoDia(dia).flatMap((sessao) =>
+                      copias.map((copia) => (
+                        <SessaoCard
+                          key={`${sessao.id}-${copia}`}
+                          sessao={sessao}
+                          selecionada={sessao.id === store.sessaoSelecionadaId}
+                          onSelecionar={() => store.selecionarSessao(sessao.id)}
+                          top={posYCiclico(formatarHoraLocal(sessao.inicioUtc), copia)}
+                          height={Math.max((sessao.duracaoMin / 60) * 48 - 3, 18)}
+                        />
+                      ))
+                    )}
                   </div>
                 </div>
               )
