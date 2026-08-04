@@ -1,5 +1,6 @@
+import { TriangleAlert } from 'lucide-react'
 import { useState } from 'react'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { formatarBytes } from './formatters'
 import type { PreviewPurga, ResultadoPurga } from './types'
@@ -23,7 +24,6 @@ export function RetencaoSection({ preview, purgando, error, ultimaPurga, onPurga
 
   if (!preview) return null
 
-  const ocupadoBytes = preview.local.totalBytes + (preview.externo?.totalBytes ?? 0) + (preview.externo?.poolTotalBytes ?? 0)
   const aLiberarBytes =
     preview.local.aLiberarBytes + (preview.externo?.aLiberarBytes ?? 0) + (preview.externo?.poolALiberarBytes ?? 0)
   const backupsAPurgar = preview.local.purgar + (preview.externo?.purgar ?? 0)
@@ -34,16 +34,7 @@ export function RetencaoSection({ preview, purgando, error, ultimaPurga, onPurga
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-border p-4">
-      <div>
-        <h2 className="text-sm font-semibold text-foreground">Retenção</h2>
-        <p className="text-xs text-muted-foreground">
-          Mantém 7 backups diários + 4 semanais + 6 mensais (local e externo) — o resto é purgável.
-        </p>
-      </div>
-
-      <p className="text-sm text-foreground">Espaço ocupado: {formatarBytes(ocupadoBytes)}</p>
-
+    <div className="flex flex-col gap-3 rounded-[0.625rem] border border-border bg-card p-[16px_18px]">
       {backupsAPurgar > 0 ? (
         <p className="text-sm text-muted-foreground">
           Uma purga agora liberaria {formatarBytes(aLiberarBytes)} ({backupsAPurgar} backup(s) fora da retenção).
@@ -59,7 +50,9 @@ export function RetencaoSection({ preview, purgando, error, ultimaPurga, onPurga
       )}
 
       {confirmando && (
-        <Alert variant="warn">
+        <Alert variant="destructive">
+          <TriangleAlert className="size-[17px]" />
+          <AlertTitle>Purgar backups fora da retenção</AlertTitle>
           <AlertDescription className="flex flex-col gap-2">
             <p>
               Isso apaga permanentemente os {backupsAPurgar} backup(s) fora da política de retenção. Os mais

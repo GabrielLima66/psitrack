@@ -48,24 +48,26 @@ export function AnotacoesPrivadasSection({ anotacoes, onCriar, onAtualizar, onEx
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border-2 border-warn-border bg-warn-background/50 p-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Lock className="size-4 text-warn-foreground" />
-          <h3 className="text-sm font-semibold text-warn-foreground">Anotações privadas</h3>
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between gap-4 rounded-[0.625rem] border border-warn-border bg-warn-background p-[16px_18px]">
+        <div className="flex items-start gap-2.5">
+          <Lock className="mt-0.5 size-[17px] shrink-0 text-warn-foreground" />
+          <div className="flex flex-col gap-0.5">
+            <h3 className="text-[13.5px] font-semibold text-warn-foreground">Anotações privadas</h3>
+            <p className="text-[13px] text-warn-foreground/80">
+              Não acessível à paciente. Nunca entra em export, relatório ou documento entregue.
+            </p>
+          </div>
         </div>
         {!editandoId && (
-          <Button type="button" size="sm" variant="outline" onClick={abrirNova}>
+          <Button type="button" className="h-[30px] shrink-0 border-warn-border text-warn-foreground hover:bg-warn-background" variant="outline" onClick={abrirNova}>
             Nova anotação
           </Button>
         )}
       </div>
-      <p className="text-[12.5px] text-warn-foreground/80">
-        Não acessível à paciente · Nunca entra em export ou relatório.
-      </p>
 
       {editandoId && (
-        <div className="flex flex-col gap-2 rounded-md bg-background/70 p-3">
+        <div className="flex flex-col gap-2 rounded-md bg-muted p-3">
           <Input placeholder="Título (opcional)" value={titulo} onChange={(event) => setTitulo(event.target.value)} />
           <Textarea rows={4} value={conteudo} onChange={(event) => setConteudo(event.target.value)} />
           <div className="flex gap-2">
@@ -81,22 +83,22 @@ export function AnotacoesPrivadasSection({ anotacoes, onCriar, onAtualizar, onEx
 
       <div className="flex flex-col gap-2">
         {anotacoes.length === 0 && !editandoId && (
-          <p className="text-sm text-warn-foreground/70">Nenhuma anotação registrada ainda.</p>
+          <p className="text-sm text-muted-foreground">Nenhuma anotação registrada ainda.</p>
         )}
         {anotacoes.map((anotacao) => (
-          <div key={anotacao.id} className="flex flex-col gap-1 rounded-md border border-warn-border/60 bg-background/50 p-3">
+          <div key={anotacao.id} className="flex flex-col gap-1.5 rounded-[0.625rem] border border-border bg-card p-3">
             <div className="flex items-center justify-between gap-2">
-              {anotacao.titulo && <span className="text-sm font-medium text-foreground">{anotacao.titulo}</span>}
-              <div className="ml-auto flex gap-1">
-                <Button type="button" variant="ghost" size="sm" onClick={() => abrirEdicao(anotacao)}>
+              {anotacao.titulo && <span className="text-[13.5px] font-medium text-foreground">{anotacao.titulo}</span>}
+              <div className="ml-auto flex gap-3">
+                <button type="button" className="text-[12.5px] text-muted-foreground hover:text-foreground" onClick={() => abrirEdicao(anotacao)}>
                   Editar
-                </Button>
-                <Button type="button" variant="ghost" size="sm" onClick={() => void onExcluir(anotacao.id)}>
+                </button>
+                <button type="button" className="text-[12.5px] text-muted-foreground hover:text-foreground" onClick={() => void onExcluir(anotacao.id)}>
                   Excluir
-                </Button>
+                </button>
               </div>
             </div>
-            <p className="text-sm whitespace-pre-wrap text-foreground">{anotacao.conteudo}</p>
+            <p className="text-[14px] leading-[1.65] whitespace-pre-wrap text-foreground">{anotacao.conteudo}</p>
           </div>
         ))}
       </div>

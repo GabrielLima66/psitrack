@@ -1,6 +1,7 @@
-import { Lock, NotebookText, Paperclip, Wallet } from 'lucide-react'
+import { ChevronLeft, Lock, NotebookText, Paperclip, User, Wallet } from 'lucide-react'
 import { useState } from 'react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -13,7 +14,7 @@ import { AtendimentoInicialSection } from './AtendimentoInicialSection'
 import { DocumentosSection } from './DocumentosSection'
 import { EvolucaoSection } from './EvolucaoSection'
 import { FinanceiroSection } from './FinanceiroSection'
-import { formatarStatus } from './formatters'
+import { formatarMesAnoBr, formatarStatus } from './formatters'
 import { calcularIdade, isMenorDeIdade } from './idade'
 import { ResponsaveisSection } from './ResponsaveisSection'
 import { usePacientesStore } from './store'
@@ -31,6 +32,15 @@ const MOTIVO_OPTIONS: { value: MotivoEncerramento; label: string }[] = [
   { value: 'encaminhamento', label: 'Encaminhamento' },
   { value: 'outro', label: 'Outro' }
 ]
+
+const STATUS_BADGE_VARIANT = {
+  ativo: 'success',
+  pausado: 'warn',
+  encerrado: 'outline'
+} as const
+
+const TAB_TRIGGER_CLASS =
+  'h-[38px] gap-1.5 rounded-none border-x-0 border-t-0 border-b-2 border-transparent bg-transparent px-1 text-[13.5px] font-medium text-muted-foreground shadow-none after:hidden hover:text-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground dark:data-[state=active]:border-primary dark:data-[state=active]:bg-transparent dark:data-[state=active]:text-foreground'
 
 function inputVazio(): PacienteInput {
   return { nome: '', nomeSocial: null, dataNascimento: null, cpf: null, telefone: null, email: null, origem: null }
@@ -67,97 +77,110 @@ export function PacienteFormScreen() {
     await store.alterarStatus({ status: novoStatus, motivoEncerramento: novoStatus === 'encerrado' ? motivoEncerramento : null })
   }
 
-  return (
-    <div className="mx-auto flex h-full max-w-3xl flex-col gap-6 overflow-y-auto p-8">
-      <button
-        type="button"
-        onClick={store.voltarParaLista}
-        className="self-start text-sm text-muted-foreground hover:text-foreground"
-      >
-        ← Voltar para a lista
-      </button>
+  const contextoPartes = existente
+    ? [
+        existente.dataNascimento ? `${calcularIdade(existente.dataNascimento)} anos` : null,
+        existente.origem ? (ORIGEM_OPTIONS.find((o) => o.value === existente.origem)?.label ?? null) : null,
+        `Em atendimento desde ${formatarMesAnoBr(existente.createdAt)}`
+      ].filter(Boolean)
+    : []
 
-      <h1 className="text-2xl font-semibold text-foreground">{existente ? 'Editar paciente' : 'Novo paciente'}</h1>
-
-      <form onSubmit={handleSalvar} className="flex flex-col gap-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="nome">Nome</Label>
-            <Input id="nome" value={form.nome} onChange={(event) => setForm({ ...form, nome: event.target.value })} required />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="nomeSocial">Nome social</Label>
-            <Input
-              id="nomeSocial"
-              value={form.nomeSocial ?? ''}
-              onChange={(event) => setForm({ ...form, nomeSocial: event.target.value || null })}
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="dataNascimento">Data de nascimento</Label>
-            <Input
-              id="dataNascimento"
-              type="date"
-              value={form.dataNascimento ?? ''}
-              onChange={(event) => setForm({ ...form, dataNascimento: event.target.value || null })}
-            />
-            {form.dataNascimento && (
-              <span className="text-xs text-muted-foreground">
-                {calcularIdade(form.dataNascimento)} anos{menor ? ' · menor de idade' : ''}
-              </span>
+  const cadastroConteudo = (
+    <div className="flex flex-col gap-5">
+      <div className="overflow-hidden rounded-[0.625rem] border border-border bg-card">
+        <form onSubmit={handleSalvar}>
+          <div className="flex items-center justify-between border-b border-border px-[18px] py-[14px]">
+            <h3 className="text-[14.5px] font-semibold text-foreground">Dados cadastrais</h3>
+            {existente && (
+              <Button type="submit" className="h-[30px]" disabled={store.formBusy}>
+                {store.formBusy ? 'Salvando…' : 'Salvar alterações'}
+              </Button>
             )}
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="cpf">CPF</Label>
-            <Input
-              id="cpf"
-              value={form.cpf ?? ''}
-              onChange={(event) => setForm({ ...form, cpf: event.target.value.replace(/\D/g, '') || null })}
-              maxLength={11}
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="telefone">Telefone</Label>
-            <Input
-              id="telefone"
-              value={form.telefone ?? ''}
-              onChange={(event) => setForm({ ...form, telefone: event.target.value || null })}
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="email">E-mail</Label>
-            <Input
-              id="email"
-              value={form.email ?? ''}
-              onChange={(event) => setForm({ ...form, email: event.target.value || null })}
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Como chegou até você</Label>
-            <Select
-              value={form.origem ?? undefined}
-              onValueChange={(value) => setForm({ ...form, origem: value as OrigemPaciente })}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecionar…" />
-              </SelectTrigger>
-              <SelectContent>
-                {ORIGEM_OPTIONS.map((opcao) => (
-                  <SelectItem key={opcao.value} value={opcao.value}>
-                    {opcao.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
 
-        {store.formError && <p className="text-sm text-destructive">{store.formError}</p>}
+          <div className="flex flex-col gap-5 p-[20px_18px]">
+            <div className="grid grid-cols-3 gap-5">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="nome">Nome</Label>
+                <Input id="nome" value={form.nome} onChange={(event) => setForm({ ...form, nome: event.target.value })} required />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="nomeSocial">Nome social</Label>
+                <Input
+                  id="nomeSocial"
+                  value={form.nomeSocial ?? ''}
+                  onChange={(event) => setForm({ ...form, nomeSocial: event.target.value || null })}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="dataNascimento">Data de nascimento</Label>
+                <Input
+                  id="dataNascimento"
+                  type="date"
+                  value={form.dataNascimento ?? ''}
+                  onChange={(event) => setForm({ ...form, dataNascimento: event.target.value || null })}
+                />
+                {form.dataNascimento && (
+                  <span className="text-xs text-muted-foreground">
+                    {calcularIdade(form.dataNascimento)} anos{menor ? ' · menor de idade' : ''}
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="cpf">CPF</Label>
+                <Input
+                  id="cpf"
+                  value={form.cpf ?? ''}
+                  onChange={(event) => setForm({ ...form, cpf: event.target.value.replace(/\D/g, '') || null })}
+                  maxLength={11}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="telefone">Telefone</Label>
+                <Input
+                  id="telefone"
+                  value={form.telefone ?? ''}
+                  onChange={(event) => setForm({ ...form, telefone: event.target.value || null })}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="email">E-mail</Label>
+                <Input
+                  id="email"
+                  value={form.email ?? ''}
+                  onChange={(event) => setForm({ ...form, email: event.target.value || null })}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Como chegou até você</Label>
+                <Select
+                  value={form.origem ?? undefined}
+                  onValueChange={(value) => setForm({ ...form, origem: value as OrigemPaciente })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecionar…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ORIGEM_OPTIONS.map((opcao) => (
+                      <SelectItem key={opcao.value} value={opcao.value}>
+                        {opcao.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
 
-        <Button type="submit" disabled={store.formBusy} className="w-full">
-          {store.formBusy ? 'Salvando…' : 'Salvar paciente'}
-        </Button>
-      </form>
+            {store.formError && <p className="text-sm text-destructive">{store.formError}</p>}
+
+            {!existente && (
+              <Button type="submit" disabled={store.formBusy} className="w-full">
+                {store.formBusy ? 'Salvando…' : 'Salvar paciente'}
+              </Button>
+            )}
+          </div>
+        </form>
+      </div>
 
       {!existente && (
         <AtendimentoInicialSection
@@ -188,127 +211,172 @@ export function PacienteFormScreen() {
           onRemover={store.removerResponsavel}
         />
       )}
+    </div>
+  )
 
-      {existente && (
-        // Abas separadas de propósito (SPEC-fase-1.md): evolução e anotação
-        // privada têm regime jurídico oposto (a paciente tem direito a uma,
-        // nunca à outra) — precisam ser distinguíveis à primeira vista, sem
-        // ler o texto. Ícone + cor (tokens warn-*) fazem essa distinção.
-        <Tabs defaultValue="evolucao">
-          <TabsList>
-            <TabsTrigger value="evolucao" className="gap-1.5">
-              <NotebookText className="size-4" />
-              Evolução clínica
-            </TabsTrigger>
-            <TabsTrigger value="anotacoes" className="gap-1.5 data-[state=active]:text-warn-foreground">
-              <Lock className="size-4" />
-              Anotações privadas
-            </TabsTrigger>
-            <TabsTrigger value="financeiro" className="gap-1.5">
-              <Wallet className="size-4" />
-              Financeiro
-            </TabsTrigger>
-            <TabsTrigger value="documentos" className="gap-1.5">
-              <Paperclip className="size-4" />
-              Documentos
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="evolucao">
-            {store.pendenciaFinanceira && (
-              <Alert variant="warn" className="mb-3">
-                <AlertDescription>{store.pendenciaFinanceira}</AlertDescription>
-              </Alert>
-            )}
-            <EvolucaoSection
-              pacienteId={existente.id}
-              evolucoes={store.evolucoes}
-              onCriar={store.criarEvolucao}
-              onRetificar={store.retificarEvolucao}
-              onCriarComSessaoRetroativa={store.criarEvolucaoComSessaoRetroativa}
-              prefill={store.prefillEvolucao}
-              onPrefillConsumido={store.limparPrefillEvolucao}
-              onAnexarDocumento={(evolucaoId) => store.anexarDocumento({ classificacao: 'prontuario', evolucaoId })}
-            />
-          </TabsContent>
-          <TabsContent value="anotacoes">
-            <AnotacoesPrivadasSection
-              anotacoes={store.anotacoes}
-              onCriar={store.criarAnotacao}
-              onAtualizar={store.atualizarAnotacao}
-              onExcluir={store.excluirAnotacao}
-            />
-          </TabsContent>
-          <TabsContent value="financeiro">
-            <FinanceiroSection
-              contratoVigente={store.contratoVigente}
-              historicoContratos={store.historicoContratos}
-              lancamentos={store.lancamentos}
-              pagamentos={store.pagamentos}
-              onReajustar={store.reajustarContrato}
-              onCriarAjuste={store.criarLancamentoAjuste}
-              onCancelarLancamento={store.cancelarLancamento}
-              onMarcarReciboEmitido={store.marcarReciboEmitido}
-            />
-          </TabsContent>
-          <TabsContent value="documentos">
-            <DocumentosSection
-              anexos={store.anexos}
-              anexosLixeira={store.anexosLixeira}
-              busy={store.anexosBusy}
-              error={store.anexosError}
-              onAnexar={store.anexarDocumento}
-              onExcluir={store.excluirAnexo}
-              onRestaurar={store.restaurarAnexo}
-              onLer={store.lerAnexoParaPreview}
-              onSalvarCopia={store.salvarCopiaAnexo}
-            />
-          </TabsContent>
-        </Tabs>
-      )}
-
-      {existente && (
-        <div className="flex flex-col gap-3 rounded-lg border border-border p-4">
-          <h3 className="text-sm font-semibold text-foreground">Status do atendimento</h3>
-          <div className="flex items-center gap-3">
-            <Select value={novoStatus} onValueChange={(value) => setNovoStatus(value as StatusPaciente)}>
-              <SelectTrigger className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ativo">{formatarStatus('ativo')}</SelectItem>
-                <SelectItem value="pausado">{formatarStatus('pausado')}</SelectItem>
-                <SelectItem value="encerrado">{formatarStatus('encerrado')}</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {novoStatus === 'encerrado' && (
-              <Select
-                value={motivoEncerramento ?? undefined}
-                onValueChange={(value) => setMotivoEncerramento(value as MotivoEncerramento)}
-              >
-                <SelectTrigger className="w-48">
-                  <SelectValue placeholder="Motivo do encerramento…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {MOTIVO_OPTIONS.map((opcao) => (
-                    <SelectItem key={opcao.value} value={opcao.value}>
-                      {opcao.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-
-            <Button
+  return (
+    <div className="flex h-full flex-col overflow-hidden">
+      {!existente ? (
+        <>
+          <div className="flex flex-col gap-3 border-b border-border bg-card px-8 pt-5 pb-4">
+            <button
               type="button"
-              variant="outline"
-              disabled={store.formBusy || (novoStatus === 'encerrado' && !motivoEncerramento)}
-              onClick={handleAlterarStatus}
+              onClick={store.voltarParaLista}
+              className="flex w-fit items-center gap-1 text-[12.5px] text-muted-foreground hover:text-foreground"
             >
-              Atualizar status
-            </Button>
+              <ChevronLeft className="size-[13px]" />
+              Pacientes
+            </button>
+            <h1 className="text-[22px] font-semibold tracking-[-0.01em] text-foreground">Novo paciente</h1>
           </div>
-        </div>
+          <div className="mx-auto min-h-0 w-full max-w-[1040px] flex-1 overflow-y-auto px-8 py-6">{cadastroConteudo}</div>
+        </>
+      ) : (
+        <Tabs defaultValue="evolucao" className="flex h-full flex-col overflow-hidden">
+          {/* Abas separadas de propósito (SPEC-fase-1.md): evolução e anotação
+              privada têm regime jurídico oposto (a paciente tem direito a uma,
+              nunca à outra) — precisam ser distinguíveis à primeira vista, sem
+              ler o texto. Ícone + cor (tokens warn-*) fazem essa distinção. */}
+          <div className="flex flex-col gap-3 border-b border-border bg-card px-8 pt-5">
+            <button
+              type="button"
+              onClick={store.voltarParaLista}
+              className="flex w-fit items-center gap-1 text-[12.5px] text-muted-foreground hover:text-foreground"
+            >
+              <ChevronLeft className="size-[13px]" />
+              Pacientes
+            </button>
+
+            <div className="flex items-start justify-between pb-4">
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <h1 className="text-[22px] font-semibold tracking-[-0.01em] text-foreground">{existente.nomeSocial || existente.nome}</h1>
+                  <Badge variant={STATUS_BADGE_VARIANT[existente.status]}>{formatarStatus(existente.status)}</Badge>
+                </div>
+                {contextoPartes.length > 0 && <p className="text-[13px] text-muted-foreground">{contextoPartes.join(' · ')}</p>}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Select value={novoStatus} onValueChange={(value) => setNovoStatus(value as StatusPaciente)}>
+                  <SelectTrigger className="h-[34px] w-44">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ativo">{formatarStatus('ativo')}</SelectItem>
+                    <SelectItem value="pausado">{formatarStatus('pausado')}</SelectItem>
+                    <SelectItem value="encerrado">{formatarStatus('encerrado')}</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {novoStatus === 'encerrado' && (
+                  <Select
+                    value={motivoEncerramento ?? undefined}
+                    onValueChange={(value) => setMotivoEncerramento(value as MotivoEncerramento)}
+                  >
+                    <SelectTrigger className="h-[34px] w-48">
+                      <SelectValue placeholder="Motivo do encerramento…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MOTIVO_OPTIONS.map((opcao) => (
+                        <SelectItem key={opcao.value} value={opcao.value}>
+                          {opcao.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-[34px]"
+                  disabled={store.formBusy || (novoStatus === 'encerrado' && !motivoEncerramento)}
+                  onClick={handleAlterarStatus}
+                >
+                  Salvar status
+                </Button>
+              </div>
+            </div>
+
+            <TabsList variant="line" className="h-auto gap-6 p-0">
+              <TabsTrigger value="cadastro" className={TAB_TRIGGER_CLASS}>
+                <User className="size-[14px]" />
+                Cadastro
+              </TabsTrigger>
+              <TabsTrigger value="evolucao" className={TAB_TRIGGER_CLASS}>
+                <NotebookText className="size-[14px]" />
+                Evolução clínica
+              </TabsTrigger>
+              <TabsTrigger value="anotacoes" className={`${TAB_TRIGGER_CLASS} data-[state=active]:text-warn-foreground dark:data-[state=active]:text-warn-foreground`}>
+                <Lock className="size-[14px]" />
+                Anotações privadas
+              </TabsTrigger>
+              <TabsTrigger value="financeiro" className={TAB_TRIGGER_CLASS}>
+                <Wallet className="size-[14px]" />
+                Financeiro
+              </TabsTrigger>
+              <TabsTrigger value="documentos" className={TAB_TRIGGER_CLASS}>
+                <Paperclip className="size-[14px]" />
+                Documentos
+              </TabsTrigger>
+            </TabsList>
+          </div>
+
+          <div className="mx-auto min-h-0 w-full max-w-[1040px] flex-1 overflow-y-auto px-8 py-6">
+            <TabsContent value="cadastro">{cadastroConteudo}</TabsContent>
+
+            <TabsContent value="evolucao">
+              {store.pendenciaFinanceira && (
+                <Alert variant="warn" className="mb-3">
+                  <AlertDescription>{store.pendenciaFinanceira}</AlertDescription>
+                </Alert>
+              )}
+              <EvolucaoSection
+                pacienteId={existente.id}
+                evolucoes={store.evolucoes}
+                onCriar={store.criarEvolucao}
+                onRetificar={store.retificarEvolucao}
+                onCriarComSessaoRetroativa={store.criarEvolucaoComSessaoRetroativa}
+                prefill={store.prefillEvolucao}
+                onPrefillConsumido={store.limparPrefillEvolucao}
+                onAnexarDocumento={(evolucaoId) => store.anexarDocumento({ classificacao: 'prontuario', evolucaoId })}
+              />
+            </TabsContent>
+            <TabsContent value="anotacoes">
+              <AnotacoesPrivadasSection
+                anotacoes={store.anotacoes}
+                onCriar={store.criarAnotacao}
+                onAtualizar={store.atualizarAnotacao}
+                onExcluir={store.excluirAnotacao}
+              />
+            </TabsContent>
+            <TabsContent value="financeiro">
+              <FinanceiroSection
+                contratoVigente={store.contratoVigente}
+                historicoContratos={store.historicoContratos}
+                lancamentos={store.lancamentos}
+                pagamentos={store.pagamentos}
+                onReajustar={store.reajustarContrato}
+                onCriarAjuste={store.criarLancamentoAjuste}
+                onCancelarLancamento={store.cancelarLancamento}
+                onMarcarReciboEmitido={store.marcarReciboEmitido}
+              />
+            </TabsContent>
+            <TabsContent value="documentos">
+              <DocumentosSection
+                anexos={store.anexos}
+                anexosLixeira={store.anexosLixeira}
+                busy={store.anexosBusy}
+                error={store.anexosError}
+                onAnexar={store.anexarDocumento}
+                onExcluir={store.excluirAnexo}
+                onRestaurar={store.restaurarAnexo}
+                onLer={store.lerAnexoParaPreview}
+                onSalvarCopia={store.salvarCopiaAnexo}
+              />
+            </TabsContent>
+          </div>
+        </Tabs>
       )}
     </div>
   )

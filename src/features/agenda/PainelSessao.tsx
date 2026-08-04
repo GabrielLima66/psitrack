@@ -28,6 +28,9 @@ const STATUS_OPCOES: { value: StatusSessao; label: string }[] = [
  * direto na agenda"). "Remarcar" é sempre oferecido, não só depois de marcar
  * falta com aviso: mais simples e ainda cobre D22 (origem nunca cobra, quem
  * cobra é o destino).
+ *
+ * Barra fixa no rodapé da tela (Etapa 5 do redesign) — antes era um card
+ * empilhado abaixo da grade.
  */
 export function PainelSessao({ sessao, onFechar, onAlterarStatus, onRemarcar, onRegistrarEvolucao }: PainelSessaoProps) {
   const [novoStatus, setNovoStatus] = useState<StatusSessao>('realizada')
@@ -51,29 +54,21 @@ export function PainelSessao({ sessao, onFechar, onAlterarStatus, onRemarcar, on
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-border p-4">
-      <div className="flex items-start justify-between">
-        <div>
-          <h3 className="text-sm font-semibold text-foreground">{sessao.pacienteNome}</h3>
-          <p className="text-xs text-muted-foreground">
+    <div className="flex flex-col gap-2 rounded-[0.625rem] border border-border bg-card p-[16px_18px] shadow-md">
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex flex-col">
+          <h3 className="text-[14.5px] font-semibold text-foreground">{sessao.pacienteNome}</h3>
+          <p className="text-[12.5px] text-muted-foreground">
             {formatarDataCurta(utcParaDataLocal(sessao.inicioUtc))} · {formatarHoraLocal(sessao.inicioUtc)} ·{' '}
             {formatarModalidade(sessao.modalidade)} · {formatarStatusSessao(sessao.status)}
           </p>
         </div>
-        <Button type="button" variant="ghost" size="sm" onClick={onFechar}>
-          Fechar
-        </Button>
-      </div>
 
-      {sessao.status === 'remarcada' && (
-        <p className="text-xs text-muted-foreground">Esta sessão foi remarcada — não gera cobrança (D22).</p>
-      )}
+        <div className="h-8 w-px shrink-0 bg-border" />
 
-      <div className="flex items-end gap-2">
-        <div className="flex flex-col gap-1">
-          <Label>Novo status</Label>
+        <div className="flex flex-1 flex-wrap items-center gap-2">
           <Select value={novoStatus} onValueChange={(value) => setNovoStatus(value as StatusSessao)}>
-            <SelectTrigger className="w-44">
+            <SelectTrigger className="h-8 w-40">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -84,56 +79,62 @@ export function PainelSessao({ sessao, onFechar, onAlterarStatus, onRemarcar, on
               ))}
             </SelectContent>
           </Select>
-        </div>
-        <div className="flex flex-1 flex-col gap-1">
-          <Label htmlFor="painel-motivo">Motivo (opcional)</Label>
-          <Input id="painel-motivo" value={motivo} onChange={(event) => setMotivo(event.target.value)} />
-        </div>
-        <Button type="button" disabled={salvando} onClick={handleAlterarStatus}>
-          Salvar
-        </Button>
-      </div>
-
-      <div className="flex flex-col gap-2 border-t border-border pt-3">
-        {!remarcando ? (
-          <Button type="button" variant="outline" size="sm" className="self-start" onClick={() => setRemarcando(true)}>
-            Remarcar (encaixe)
+          <Input
+            className="h-8 w-40"
+            placeholder="Motivo (opcional)"
+            value={motivo}
+            onChange={(event) => setMotivo(event.target.value)}
+          />
+          <Button type="button" className="h-8" disabled={salvando} onClick={handleAlterarStatus}>
+            Salvar status
           </Button>
-        ) : (
-          <div className="flex items-end gap-2">
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="painel-remarcar-data">Nova data</Label>
-              <Input
-                id="painel-remarcar-data"
-                type="date"
-                value={dataRemarcar}
-                onChange={(event) => setDataRemarcar(event.target.value)}
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="painel-remarcar-hora">Nova hora</Label>
-              <Input
-                id="painel-remarcar-hora"
-                type="time"
-                value={horaRemarcar}
-                onChange={(event) => setHoraRemarcar(event.target.value)}
-              />
-            </div>
-            <Button type="button" disabled={salvando || !horaRemarcar} onClick={handleRemarcar}>
-              Confirmar remarcação
+          {!remarcando && (
+            <Button type="button" variant="outline" className="h-8" onClick={() => setRemarcando(true)}>
+              Remarcar
             </Button>
-            <Button type="button" variant="ghost" onClick={() => setRemarcando(false)}>
-              Cancelar
-            </Button>
-          </div>
-        )}
+          )}
+          <Button type="button" variant="outline" className="h-8" onClick={onRegistrarEvolucao}>
+            Registrar evolução
+          </Button>
+        </div>
+
+        <button type="button" className="shrink-0 text-[13px] text-muted-foreground hover:text-foreground" onClick={onFechar}>
+          Fechar
+        </button>
       </div>
 
-      <div className="border-t border-border pt-3">
-        <Button type="button" variant="outline" size="sm" onClick={onRegistrarEvolucao}>
-          Registrar evolução
-        </Button>
-      </div>
+      {sessao.status === 'remarcada' && (
+        <p className="text-xs text-muted-foreground">Esta sessão foi remarcada — não gera cobrança (D22).</p>
+      )}
+
+      {remarcando && (
+        <div className="flex items-end gap-2 border-t border-border pt-3">
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="painel-remarcar-data">Nova data</Label>
+            <Input
+              id="painel-remarcar-data"
+              type="date"
+              value={dataRemarcar}
+              onChange={(event) => setDataRemarcar(event.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="painel-remarcar-hora">Nova hora</Label>
+            <Input
+              id="painel-remarcar-hora"
+              type="time"
+              value={horaRemarcar}
+              onChange={(event) => setHoraRemarcar(event.target.value)}
+            />
+          </div>
+          <Button type="button" disabled={salvando || !horaRemarcar} onClick={handleRemarcar}>
+            Confirmar remarcação
+          </Button>
+          <Button type="button" variant="ghost" onClick={() => setRemarcando(false)}>
+            Cancelar
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

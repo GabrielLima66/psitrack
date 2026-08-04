@@ -142,16 +142,17 @@ export function EvolucaoSection({
   const retificandoOriginal = typeof modo === 'object' ? porId.get(modo.retificando) : undefined
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-border p-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-foreground">Evolução clínica</h3>
+    <div className="overflow-hidden rounded-[0.625rem] border border-border bg-card">
+      <div className="flex items-center justify-between border-b border-border px-[18px] py-[14px]">
+        <h3 className="text-[14.5px] font-semibold text-foreground">Evolução clínica</h3>
         {modo === 'fechado' && (
-          <Button type="button" size="sm" onClick={abrirNovaEntrada}>
+          <Button type="button" className="h-[30px]" onClick={abrirNovaEntrada}>
             Nova entrada
           </Button>
         )}
       </div>
 
+      <div className="flex flex-col gap-4 p-[20px_18px]">
       {modo !== 'fechado' && (
         <div className="flex flex-col gap-2 rounded-md bg-muted p-3">
           {retificandoOriginal && (
@@ -242,57 +243,65 @@ export function EvolucaoSection({
         </div>
       )}
 
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col">
         {evolucoes.length === 0 && <p className="text-sm text-muted-foreground">Nenhuma entrada registrada ainda.</p>}
-        {evolucoes.map((entrada) => {
+        {evolucoes.map((entrada, indice) => {
           const retificacao = retificadaPor.get(entrada.id)
           const original = entrada.retificaId ? porId.get(entrada.retificaId) : undefined
 
           return (
-            <div key={entrada.id} className="flex flex-col gap-1.5 rounded-md border border-border p-3">
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>
-                  {formatarDataBr(entrada.dataSessao)} · {formatarTipoEvolucao(entrada.tipo)}
-                </span>
-                <span>Registrado em {formatarDataHoraBr(entrada.createdAt)}</span>
+            <div
+              key={entrada.id}
+              className={`flex gap-5 pb-5 ${indice > 0 ? 'pt-5' : ''} ${indice < evolucoes.length - 1 ? 'border-b border-border' : ''}`}
+            >
+              <div className="flex w-[150px] shrink-0 flex-col items-end gap-0.5 border-r border-border pr-5 text-right">
+                <span className="font-mono text-[13.5px] font-medium text-foreground">{formatarDataBr(entrada.dataSessao)}</span>
+                <span className="text-xs text-muted-foreground">{formatarTipoEvolucao(entrada.tipo)}</span>
+                <span className="text-[11.5px] text-muted-foreground">registrado em {formatarDataHoraBr(entrada.createdAt)}</span>
               </div>
 
-              {original && (
-                <p className="text-[13px] text-muted-foreground">
-                  ↳ Retifica entrada de {formatarDataBr(original.dataSessao)} — motivo: {entrada.motivoRetificacao}
-                </p>
-              )}
+              <div className="flex flex-1 flex-col gap-1.5">
+                {original && (
+                  <p className="text-[12.5px] text-muted-foreground italic">
+                    ↳ Retifica entrada de {formatarDataBr(original.dataSessao)} — motivo: {entrada.motivoRetificacao}
+                  </p>
+                )}
 
-              <p className="text-sm whitespace-pre-wrap text-foreground">{entrada.conteudo}</p>
+                <p className="text-pretty text-[14px] leading-[1.65] whitespace-pre-wrap text-foreground">{entrada.conteudo}</p>
 
-              {retificacao && (
-                <p className="text-[13px] text-muted-foreground">
-                  Retificada em {formatarDataBr(retificacao.dataSessao)} — o texto corrigido está em outra entrada
-                  desta timeline.
-                </p>
-              )}
+                {retificacao && (
+                  <p className="text-[12.5px] text-muted-foreground">
+                    Retificada em {formatarDataBr(retificacao.dataSessao)} — o texto corrigido está em outra entrada
+                    desta timeline.
+                  </p>
+                )}
 
-              {modo === 'fechado' && (
-                <div className="flex gap-1 self-start">
-                  {!retificacao && (
-                    <Button type="button" variant="ghost" size="sm" onClick={() => abrirRetificacao(entrada)}>
-                      Retificar
-                    </Button>
-                  )}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    disabled={anexandoEntradaId === entrada.id}
-                    onClick={() => void handleAnexarDocumento(entrada.id)}
-                  >
-                    {anexandoEntradaId === entrada.id ? 'Anexando…' : 'Anexar documento'}
-                  </Button>
-                </div>
-              )}
+                {modo === 'fechado' && (
+                  <div className="flex gap-3 pt-1">
+                    {!retificacao && (
+                      <button
+                        type="button"
+                        className="text-[12.5px] text-muted-foreground hover:text-foreground"
+                        onClick={() => abrirRetificacao(entrada)}
+                      >
+                        Retificar
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="text-[12.5px] text-muted-foreground hover:text-foreground disabled:opacity-50"
+                      disabled={anexandoEntradaId === entrada.id}
+                      onClick={() => void handleAnexarDocumento(entrada.id)}
+                    >
+                      {anexandoEntradaId === entrada.id ? 'Anexando…' : 'Anexar documento'}
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           )
         })}
+      </div>
       </div>
     </div>
   )

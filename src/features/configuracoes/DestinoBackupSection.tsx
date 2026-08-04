@@ -84,6 +84,10 @@ export function DestinoBackupSection({
       {destino && (
         <div className="flex flex-col gap-2">
           <p className="text-sm text-foreground break-all">{destino}</p>
+          <p className="text-xs text-warn-foreground">
+            Se esta pasta for sincronizada com nuvem, o backup cifrado sai deste computador — a senha mestra e a
+            recovery key passam a ser a única proteção dele.
+          </p>
           <p className={defasado ? 'text-sm font-medium text-destructive' : 'text-xs text-muted-foreground'}>
             {ultimoBackupExternoEm
               ? `Último backup externo: há ${dias} dia(s) — ${formatarDataHoraBr(ultimoBackupExternoEm)}`

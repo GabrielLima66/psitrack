@@ -45,9 +45,12 @@ export function AtendimentoInicialSection({
   const valorReais = contrato.valorCentavos > 0 ? (contrato.valorCentavos / 100).toFixed(2) : ''
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-border p-4">
-      <h3 className="text-sm font-semibold text-foreground">Atendimento</h3>
+    <div className="overflow-hidden rounded-[0.625rem] border border-border bg-card">
+      <div className="border-b border-border px-[18px] py-[14px]">
+        <h3 className="text-[14.5px] font-semibold text-foreground">Atendimento</h3>
+      </div>
 
+      <div className="flex flex-col gap-3 p-[20px_18px]">
       <div className="flex flex-col gap-2">
         <Label>Horários fixos (opcional)</Label>
         {recorrencias.map((rec, index) => (
@@ -156,6 +159,7 @@ export function AtendimentoInicialSection({
             </SelectContent>
           </Select>
         </div>
+      </div>
       </div>
     </div>
   )

@@ -1,5 +1,6 @@
+import { TriangleAlert } from 'lucide-react'
 import { useState } from 'react'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatarBytes, formatarDataHoraBr } from './formatters'
@@ -30,7 +31,7 @@ export function BackupItem({ backup, verificando, resultadoVerificacao, restaura
     <div className="flex flex-col gap-2 rounded-md border border-border p-3">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Badge variant={backup.origem === 'manual' ? 'secondary' : 'outline'}>
+          <Badge variant={backup.origem === 'manual' ? 'neutral' : 'outline'}>
             {backup.origem === 'manual' ? 'Manual' : 'Segurança pré-restauração'}
           </Badge>
           <span className="text-sm text-foreground">{formatarDataHoraBr(backup.manifest.createdAt)}</span>
@@ -63,6 +64,8 @@ export function BackupItem({ backup, verificando, resultadoVerificacao, restaura
 
       {confirmando && (
         <Alert variant="destructive">
+          <TriangleAlert className="size-[17px]" />
+          <AlertTitle>Restaurar este backup</AlertTitle>
           <AlertDescription className="flex flex-col gap-2">
             <p>
               Isso vai substituir TODO o estado atual do app (pacientes, prontuário, agenda,

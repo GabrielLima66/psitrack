@@ -6,10 +6,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { ContratoPreco, ContratoPrecoInput, Lancamento, LancamentoAjusteInput, MarcarReciboEmitidoInput, Pagamento, PoliticaFalta } from '../agenda/types'
+import { ChevronDown } from 'lucide-react'
 import {
   formatarCentavos,
   formatarCompetencia,
   formatarDataBr,
+  formatarDataCurtaUtc,
   formatarMeioPagamento,
   formatarModalidadeContrato,
   formatarPoliticaFalta,
@@ -66,6 +68,8 @@ export function FinanceiroSection({
   const [ajusteDescricao, setAjusteDescricao] = useState('')
   const [ajusteCompetencia, setAjusteCompetencia] = useState(hoje().slice(0, 7))
 
+  const [historicoAberto, setHistoricoAberto] = useState(false)
+
   async function handleReajustar(): Promise<void> {
     const valorCentavos = Math.round(Number(novoValor || 0) * 100)
     const resultado = await onReajustar({
@@ -112,10 +116,35 @@ export function FinanceiroSection({
   }
   const competencias = [...lancamentosPorCompetencia.keys()].sort().reverse()
 
+  const mesAtual = hoje().slice(0, 7)
+  const totalEmAberto = lancamentos.filter((l) => l.status === 'pendente').reduce((acc, l) => acc + l.valorCentavos, 0)
+  const totalRecebidoMes = pagamentos.filter((p) => p.data.slice(0, 7) === mesAtual).reduce((acc, p) => acc + p.valorCentavos, 0)
+
   return (
     <div className="flex flex-col gap-4">
-      <div className="rounded-lg border border-border p-4">
-        <h3 className="mb-2 text-sm font-semibold text-foreground">Contrato vigente</h3>
+      <div className="grid grid-cols-3 gap-[14px]">
+        <div className="rounded-[0.625rem] border border-border bg-card p-[16px_18px]">
+          <p className="text-[12.5px] text-muted-foreground">Em aberto</p>
+          <p className="mt-1 font-mono text-[22px] font-medium text-foreground">{formatarCentavos(totalEmAberto)}</p>
+        </div>
+        <div className="rounded-[0.625rem] border border-border bg-card p-[16px_18px]">
+          <p className="text-[12.5px] text-muted-foreground">Recebido em {formatarCompetencia(mesAtual)}</p>
+          <p className="mt-1 font-mono text-[22px] font-medium text-foreground">{formatarCentavos(totalRecebidoMes)}</p>
+        </div>
+        <div className="rounded-[0.625rem] border border-border bg-card p-[16px_18px]">
+          <p className="text-[12.5px] text-muted-foreground">Contrato vigente</p>
+          <p className="mt-1 font-mono text-[22px] font-medium text-foreground">
+            {contratoVigente?.valorCentavos != null ? formatarCentavos(contratoVigente.valorCentavos) : '—'}
+          </p>
+          {contratoVigente && <p className="mt-1 text-xs text-muted-foreground">{formatarModalidadeContrato(contratoVigente.modalidade)}</p>}
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-[0.625rem] border border-border bg-card">
+        <div className="border-b border-border px-[18px] py-[14px]">
+          <h3 className="text-[14.5px] font-semibold text-foreground">Contrato vigente</h3>
+        </div>
+        <div className="flex flex-col p-[20px_18px]">
         {contratoVigente ? (
           <div className="flex flex-col gap-1 text-sm">
             <span className="text-foreground">
@@ -130,7 +159,7 @@ export function FinanceiroSection({
         )}
 
         {!reajustando ? (
-          <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => setReajustando(true)}>
+          <Button type="button" variant="outline" size="sm" className="mt-3 self-start" onClick={() => setReajustando(true)}>
             Reajustar preço
           </Button>
         ) : (
@@ -193,9 +222,17 @@ export function FinanceiroSection({
         )}
 
         {historicoContratos.length > 1 && (
-          <details className="mt-3 text-xs text-muted-foreground">
-            <summary className="cursor-pointer">Histórico de vigências ({historicoContratos.length})</summary>
-            <div className="mt-1 flex flex-col gap-1">
+          <div className="mt-3 border-t border-border pt-3">
+            <button
+              type="button"
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => setHistoricoAberto((v) => !v)}
+            >
+              <ChevronDown className={`size-3.5 transition-transform ${historicoAberto ? 'rotate-180' : ''}`} />
+              Histórico de vigências ({historicoContratos.length})
+            </button>
+            {historicoAberto && (
+            <div className="mt-2 flex flex-col gap-1 text-xs text-muted-foreground">
               {historicoContratos.map((c) => (
                 <span key={c.id}>
                   Desde {formatarDataBr(c.vigenciaInicio)}: {c.valorCentavos != null ? formatarCentavos(c.valorCentavos) : '—'} ·{' '}
@@ -203,20 +240,23 @@ export function FinanceiroSection({
                 </span>
               ))}
             </div>
-          </details>
+            )}
+          </div>
         )}
+        </div>
       </div>
 
-      <div className="rounded-lg border border-border p-4">
-        <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-foreground">Lançamentos</h3>
+      <div className="overflow-hidden rounded-[0.625rem] border border-border bg-card">
+        <div className="flex items-center justify-between border-b border-border px-[18px] py-[14px]">
+          <h3 className="text-[14.5px] font-semibold text-foreground">Lançamentos</h3>
           {!ajustando && (
-            <Button type="button" variant="outline" size="sm" onClick={() => setAjustando(true)}>
+            <Button type="button" variant="outline" className="h-[30px]" onClick={() => setAjustando(true)}>
               Lançamento manual
             </Button>
           )}
         </div>
 
+        <div className="flex flex-col p-[20px_18px]">
         {ajustando && (
           <div className="mb-3 flex flex-col gap-2 rounded-md bg-muted p-3">
             <div className="grid grid-cols-4 gap-2">
@@ -265,23 +305,22 @@ export function FinanceiroSection({
         {competencias.map((competencia) => (
           <div key={competencia} className="mb-3">
             <p className="mb-1 text-xs font-medium text-muted-foreground">{formatarCompetencia(competencia)}</p>
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col">
               {lancamentosPorCompetencia.get(competencia)!.map((l) => (
-                <div key={l.id} className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
-                  <div className="flex flex-col">
-                    <span className="text-foreground">
-                      {formatarTipoLancamento(l.tipo)} · {formatarCentavos(l.valorCentavos)}
-                    </span>
-                    <span className="text-xs text-muted-foreground">{l.descricao}</span>
+                <div key={l.id} className="flex h-11 items-center gap-3 border-b border-border last:border-0">
+                  <span className="w-[110px] shrink-0 font-mono text-[13.5px] text-muted-foreground">{formatarDataCurtaUtc(l.createdAt)}</span>
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate text-[13.5px] text-foreground">{l.descricao || formatarTipoLancamento(l.tipo)}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant={l.status === 'pago' ? 'default' : l.status === 'cancelado' ? 'outline' : 'secondary'}>
+                  <span className="w-[120px] shrink-0 text-right font-mono text-[13.5px] text-foreground">{formatarCentavos(l.valorCentavos)}</span>
+                  <div className="flex w-[110px] shrink-0 items-center justify-end gap-2">
+                    <Badge variant={l.status === 'pago' ? 'success' : l.status === 'cancelado' ? 'outline' : 'warn'}>
                       {formatarStatusLancamento(l.status)}
                     </Badge>
                     {l.status === 'pendente' && (
-                      <Button type="button" variant="ghost" size="sm" onClick={() => onCancelarLancamento(l.id)}>
+                      <button type="button" className="text-[12.5px] text-muted-foreground hover:text-foreground" onClick={() => onCancelarLancamento(l.id)}>
                         Cancelar
-                      </Button>
+                      </button>
                     )}
                   </div>
                 </div>
@@ -289,10 +328,14 @@ export function FinanceiroSection({
             </div>
           </div>
         ))}
+        </div>
       </div>
 
-      <div className="rounded-lg border border-border p-4">
-        <h3 className="mb-2 text-sm font-semibold text-foreground">Pagamentos</h3>
+      <div className="overflow-hidden rounded-[0.625rem] border border-border bg-card">
+        <div className="border-b border-border px-[18px] py-[14px]">
+          <h3 className="text-[14.5px] font-semibold text-foreground">Pagamentos</h3>
+        </div>
+        <div className="flex flex-col p-[20px_18px]">
         {pagamentos.length === 0 && <p className="text-sm text-muted-foreground">Nenhum pagamento registrado ainda.</p>}
         <div className="flex flex-col gap-2">
           {pagamentos.map((p) => (
@@ -339,6 +382,7 @@ export function FinanceiroSection({
               )}
             </div>
           ))}
+        </div>
         </div>
       </div>
     </div>

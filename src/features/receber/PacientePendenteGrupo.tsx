@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -60,42 +61,40 @@ export function PacientePendenteGrupo({ pacienteId, pacienteNome, lancamentos, c
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-border p-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-foreground">{pacienteNome}</h3>
-        <span className="text-xs text-muted-foreground">
-          {contrato?.modalidade === 'mensal' ? 'Mensal' : 'Avulso'}
-        </span>
+    <div className="overflow-hidden rounded-[0.625rem] border border-border bg-card">
+      <div className="flex items-center justify-between gap-3 px-[18px] py-[13px]">
+        <div className="flex items-center gap-2">
+          <h3 className="text-[14px] font-semibold text-foreground">{pacienteNome}</h3>
+          <Badge variant={contrato?.modalidade === 'mensal' ? 'default' : 'neutral'}>
+            {contrato?.modalidade === 'mensal' ? 'Mensal' : 'Avulso'}
+          </Badge>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-[13px] text-muted-foreground">
+            Selecionado <span className="font-mono font-medium text-foreground">{formatarCentavos(totalSelecionado)}</span>
+          </span>
+          {!registrando && (
+            <Button type="button" className="h-[30px]" disabled={selecionados.length === 0} onClick={handleAbrirRegistrar}>
+              Registrar pagamento
+            </Button>
+          )}
+        </div>
       </div>
 
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col px-[18px] pb-3">
         {lancamentos.map((l) => (
-          <label key={l.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted">
-            <Checkbox
-              checked={selecionados.includes(l.id)}
-              onCheckedChange={() => store.toggleSelecionado(pacienteId, l.id)}
-            />
-            <span className="flex-1">
+          <label key={l.id} className="flex h-10 items-center gap-2 border-t border-border text-[13.5px] first:border-t-0">
+            <Checkbox checked={selecionados.includes(l.id)} onCheckedChange={() => store.toggleSelecionado(pacienteId, l.id)} />
+            <span className="flex-1 truncate">
               {formatarTipoLancamento(l.tipo)} · {formatarCompetencia(l.competencia)} · {l.descricao}
             </span>
-            <span className="font-medium text-foreground">{formatarCentavos(l.valorCentavos)}</span>
+            <span className="font-mono text-[13.5px] text-foreground">{formatarCentavos(l.valorCentavos)}</span>
           </label>
         ))}
       </div>
 
-      <div className="flex items-center justify-between border-t border-border pt-2">
-        <span className="text-sm text-muted-foreground">
-          Selecionado: <span className="font-medium text-foreground">{formatarCentavos(totalSelecionado)}</span>
-        </span>
-        {!registrando && (
-          <Button type="button" size="sm" disabled={selecionados.length === 0} onClick={handleAbrirRegistrar}>
-            Registrar pagamento
-          </Button>
-        )}
-      </div>
-
       {registrando && (
-        <div className="flex flex-col gap-2 rounded-md bg-muted p-3">
+        <div className="mx-[18px] mb-[18px] flex flex-col gap-2 rounded-md bg-muted p-3">
           <div className="grid grid-cols-4 gap-2">
             <div className="flex flex-col gap-1">
               <Label htmlFor={`receber-data-${pacienteId}`}>Data</Label>

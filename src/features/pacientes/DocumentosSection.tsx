@@ -58,21 +58,23 @@ export function DocumentosSection({
   const lista = mostrarLixeira ? anexosLixeira : anexos
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-foreground">Documentos</h3>
-        <div className="flex gap-2">
-          <Button type="button" variant="ghost" size="sm" onClick={() => setMostrarLixeira((v) => !v)}>
+    <div className="overflow-hidden rounded-[0.625rem] border border-border bg-card">
+      <div className="flex items-center justify-between border-b border-border px-[18px] py-[14px]">
+        <h3 className="text-[14.5px] font-semibold text-foreground">Documentos</h3>
+        <div className="flex items-center gap-3">
+          <button type="button" className="text-[12.5px] text-muted-foreground hover:text-foreground" onClick={() => setMostrarLixeira((v) => !v)}>
             {mostrarLixeira ? 'Ver ativos' : `Lixeira (${anexosLixeira.length})`}
-          </Button>
+          </button>
           {!anexando && !mostrarLixeira && (
-            <Button type="button" size="sm" onClick={() => setAnexando(true)}>
+            <Button type="button" className="h-8" onClick={() => setAnexando(true)}>
               <Paperclip className="size-4" />
               Anexar
             </Button>
           )}
         </div>
       </div>
+
+      <div className="flex flex-col gap-3 p-[20px_18px]">
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
@@ -118,18 +120,18 @@ export function DocumentosSection({
             key={anexo.id}
             className={
               anexo.classificacao === 'privado'
-                ? 'flex items-center justify-between gap-2 rounded-md border border-warn-border/60 bg-warn-background/50 p-3'
-                : 'flex items-center justify-between gap-2 rounded-md border border-border p-3'
+                ? 'flex items-center justify-between gap-3 rounded-[0.625rem] border border-warn-border/60 bg-warn-background/50 px-4 py-[13px]'
+                : 'flex items-center justify-between gap-3 rounded-[0.625rem] border border-border px-4 py-[13px]'
             }
           >
-            <div className="flex items-center gap-2 overflow-hidden">
+            <div className="flex items-center gap-3 overflow-hidden">
               {anexo.classificacao === 'privado' ? (
                 <Lock className="size-4 shrink-0 text-warn-foreground" />
               ) : (
                 <FileText className="size-4 shrink-0 text-muted-foreground" />
               )}
               <div className="flex flex-col overflow-hidden">
-                <span className="truncate text-sm text-foreground">{anexo.nomeOriginal}</span>
+                <span className="truncate text-[13.5px] font-medium text-foreground">{anexo.nomeOriginal}</span>
                 <span className="text-xs text-muted-foreground">
                   {formatarBytes(anexo.tamanhoBytes)} · {formatarClassificacaoAnexo(anexo.classificacao)} ·{' '}
                   {formatarDataHoraBr(anexo.createdAt)}
@@ -137,27 +139,33 @@ export function DocumentosSection({
                 </span>
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-1">
+            <div className="flex shrink-0 items-center gap-3">
               {temPreview(anexo.mime) && (
-                <Button type="button" variant="ghost" size="sm" onClick={() => setPreviewAnexo(anexo)}>
+                <button type="button" className="text-[12.5px] text-muted-foreground hover:text-foreground" onClick={() => setPreviewAnexo(anexo)}>
                   Visualizar
-                </Button>
+                </button>
               )}
-              <Button type="button" variant="ghost" size="sm" title="Copia o arquivo decifrado pra fora da proteção do app" onClick={() => void onSalvarCopia(anexo.id)}>
+              <button
+                type="button"
+                className="text-[12.5px] text-muted-foreground hover:text-foreground"
+                title="Copia o arquivo decifrado pra fora da proteção do app"
+                onClick={() => void onSalvarCopia(anexo.id)}
+              >
                 Salvar cópia
-              </Button>
+              </button>
               {mostrarLixeira ? (
-                <Button type="button" variant="ghost" size="sm" onClick={() => void onRestaurar(anexo.id)}>
+                <button type="button" className="text-[12.5px] text-muted-foreground hover:text-foreground" onClick={() => void onRestaurar(anexo.id)}>
                   Restaurar
-                </Button>
+                </button>
               ) : (
-                <Button type="button" variant="ghost" size="sm" onClick={() => void onExcluir(anexo.id)}>
+                <button type="button" className="text-muted-foreground hover:text-destructive" onClick={() => void onExcluir(anexo.id)}>
                   <Trash2 className="size-4" />
-                </Button>
+                </button>
               )}
             </div>
           </div>
         ))}
+      </div>
       </div>
 
       {previewAnexo && <AnexoPreview anexo={previewAnexo} onClose={() => setPreviewAnexo(null)} onLer={onLer} />}

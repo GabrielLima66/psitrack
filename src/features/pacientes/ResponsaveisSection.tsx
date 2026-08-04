@@ -39,9 +39,12 @@ export function ResponsaveisSection({ responsaveis, onCriar, onRemover }: Respon
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-border p-4">
-      <h3 className="text-sm font-semibold text-foreground">Responsáveis legais</h3>
+    <div className="overflow-hidden rounded-[0.625rem] border border-border bg-card">
+      <div className="border-b border-border px-[18px] py-[14px]">
+        <h3 className="text-[14.5px] font-semibold text-foreground">Responsáveis legais</h3>
+      </div>
 
+      <div className="flex flex-col gap-3 p-[20px_18px]">
       {responsaveis.length === 0 && (
         <p className="text-[13px] text-destructive">
           Nenhum responsável cadastrado. O paciente pode ser salvo mesmo assim, mas cadastre um responsável assim que
@@ -122,9 +125,10 @@ export function ResponsaveisSection({ responsaveis, onCriar, onRemover }: Respon
           </div>
         </div>
       </div>
-      <Button type="button" variant="outline" disabled={adicionando || !novo.nome.trim()} onClick={handleAdicionar}>
+      <Button type="button" variant="outline" className="self-start" disabled={adicionando || !novo.nome.trim()} onClick={handleAdicionar}>
         Adicionar responsável
       </Button>
+      </div>
     </div>
   )
 }

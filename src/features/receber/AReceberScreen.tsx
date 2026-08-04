@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { formatarCompetencia } from '../pacientes/formatters'
 import { PacientePendenteGrupo } from './PacientePendenteGrupo'
 import { RelatorioMensalSection } from './RelatorioMensalSection'
 import { useReceberStore } from './store'
@@ -20,8 +21,13 @@ export function AReceberScreen() {
   }
 
   return (
-    <div className="mx-auto flex h-full max-w-4xl flex-col gap-4 overflow-y-auto p-8">
-      <h1 className="text-2xl font-semibold text-foreground">A receber</h1>
+    <div className="mx-auto flex h-full w-full max-w-[1040px] flex-col gap-6 overflow-y-auto px-8 py-7">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-[-0.01em] text-foreground">A receber</h1>
+        <p className="mt-1 text-[13px] text-muted-foreground">
+          Competência <span className="font-mono">{formatarCompetencia(store.competenciaRelatorio)}</span>
+        </p>
+      </div>
 
       <RelatorioMensalSection />
 
@@ -29,16 +35,18 @@ export function AReceberScreen() {
       {store.loading && <p className="text-sm text-muted-foreground">Carregando…</p>}
       {!store.loading && porPaciente.size === 0 && <p className="text-sm text-muted-foreground">Nada pendente.</p>}
 
-      {[...porPaciente.entries()].map(([pacienteId, grupo]) => (
-        <PacientePendenteGrupo
-          key={pacienteId}
-          pacienteId={pacienteId}
-          pacienteNome={grupo.pacienteNome}
-          lancamentos={grupo.lancamentos}
-          contrato={store.contratos[pacienteId] ?? null}
-          selecionados={store.selecionados[pacienteId] ?? []}
-        />
-      ))}
+      <div className="flex flex-col gap-4">
+        {[...porPaciente.entries()].map(([pacienteId, grupo]) => (
+          <PacientePendenteGrupo
+            key={pacienteId}
+            pacienteId={pacienteId}
+            pacienteNome={grupo.pacienteNome}
+            lancamentos={grupo.lancamentos}
+            contrato={store.contratos[pacienteId] ?? null}
+            selecionados={store.selecionados[pacienteId] ?? []}
+          />
+        ))}
+      </div>
     </div>
   )
 }

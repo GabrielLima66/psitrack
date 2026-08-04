@@ -1,11 +1,18 @@
+import { ExternalLink } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { formatarCentavos, formatarMeioPagamento } from '../pacientes/formatters'
+import { formatarCentavos, formatarCompetencia, formatarMeioPagamento } from '../pacientes/formatters'
 import { useReceberStore } from './store'
 
-/** Relatório do mês (Etapa 13): recebido por meio, em aberto por paciente, relação pronta pra Receita Saúde + export CSV local. */
+/**
+ * Cabeçalho de competência + export CSV, e os 3 cards de estatística do
+ * topo da tela A receber (Etapa 6 do redesign — antes era um relatório em
+ * duas colunas de texto corrido). "Vencendo esta semana" do mock não entrou:
+ * `Lancamento` não tem data de vencimento no modelo de dados hoje, só
+ * competência — troquei por "Lançamentos pendentes" (contagem real).
+ */
 export function RelatorioMensalSection() {
   const store = useReceberStore()
   const [mensagemExport, setMensagemExport] = useState<string | null>(null)
@@ -22,50 +29,54 @@ export function RelatorioMensalSection() {
   }
 
   const relatorio = store.relatorio
+  const totalEmAberto = store.pendentes.reduce((soma, l) => soma + l.valorCentavos, 0)
+  const pacientesComPendencia = new Set(store.pendentes.map((l) => l.pacienteId)).size
+  const totalRecebido = relatorio ? relatorio.recebidoPorMeio.reduce((soma, r) => soma + r.totalCentavos, 0) : 0
+  const notaRecebido =
+    relatorio && relatorio.recebidoPorMeio.length > 0
+      ? relatorio.recebidoPorMeio.map((r) => `${formatarMeioPagamento(r.meio)} ${formatarCentavos(r.totalCentavos)}`).join(' · ')
+      : 'Nada recebido neste mês.'
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-border p-4">
+    <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-foreground">Relatório do mês</h3>
         <div className="flex items-center gap-2">
-          <Label htmlFor="receber-competencia" className="text-xs">
+          <Label htmlFor="receber-competencia" className="text-[13px] text-muted-foreground">
             Competência
           </Label>
           <Input
             id="receber-competencia"
             type="month"
-            className="w-36"
+            className="h-[34px] w-36"
             value={store.competenciaRelatorio}
             onChange={(e) => store.setCompetenciaRelatorio(e.target.value)}
           />
-          <Button type="button" variant="outline" size="sm" onClick={handleExportar}>
-            Exportar CSV
-          </Button>
         </div>
+        <Button type="button" variant="outline" className="h-[34px]" onClick={handleExportar}>
+          <ExternalLink className="size-[14px] text-warn-foreground" />
+          Exportar CSV
+        </Button>
       </div>
 
-      {relatorio && (
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <p className="mb-1 font-medium text-foreground">Recebido por meio</p>
-            {relatorio.recebidoPorMeio.length === 0 && <p className="text-muted-foreground">Nada recebido neste mês.</p>}
-            {relatorio.recebidoPorMeio.map((r) => (
-              <p key={r.meio} className="text-muted-foreground">
-                {formatarMeioPagamento(r.meio)}: <span className="text-foreground">{formatarCentavos(r.totalCentavos)}</span>
-              </p>
-            ))}
-          </div>
-          <div>
-            <p className="mb-1 font-medium text-foreground">Em aberto por paciente</p>
-            {relatorio.emAbertoPorPaciente.length === 0 && <p className="text-muted-foreground">Nada em aberto.</p>}
-            {relatorio.emAbertoPorPaciente.map((p) => (
-              <p key={p.pacienteId} className="text-muted-foreground">
-                {p.pacienteNome}: <span className="text-foreground">{formatarCentavos(p.totalCentavos)}</span>
-              </p>
-            ))}
-          </div>
+      <div className="grid grid-cols-3 gap-[14px]">
+        <div className="rounded-[0.625rem] border border-border bg-card p-[16px_18px]">
+          <p className="text-[12.5px] text-muted-foreground">Total em aberto</p>
+          <p className="mt-1 font-mono text-[22px] font-medium text-foreground">{formatarCentavos(totalEmAberto)}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {pacientesComPendencia} paciente{pacientesComPendencia === 1 ? '' : 's'}
+          </p>
         </div>
-      )}
+        <div className="rounded-[0.625rem] border border-border bg-card p-[16px_18px]">
+          <p className="text-[12.5px] text-muted-foreground">Recebido em {formatarCompetencia(store.competenciaRelatorio)}</p>
+          <p className="mt-1 font-mono text-[22px] font-medium text-foreground">{formatarCentavos(totalRecebido)}</p>
+          <p className="mt-1 truncate text-xs text-muted-foreground">{notaRecebido}</p>
+        </div>
+        <div className="rounded-[0.625rem] border border-border bg-card p-[16px_18px]">
+          <p className="text-[12.5px] text-muted-foreground">Lançamentos pendentes</p>
+          <p className="mt-1 font-mono text-[22px] font-medium text-foreground">{store.pendentes.length}</p>
+          <p className="mt-1 text-xs text-muted-foreground">aguardando pagamento</p>
+        </div>
+      </div>
 
       {mensagemExport && <p className="text-sm text-muted-foreground">{mensagemExport}</p>}
       {store.relatorioError && <p className="text-sm text-destructive">{store.relatorioError}</p>}

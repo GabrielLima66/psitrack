@@ -29,6 +29,28 @@ export function formatarDataHoraBr(isoUtc: string): string {
   return FORMATADOR_DATA_HORA_SP.format(new Date(isoUtc))
 }
 
+const FORMATADOR_MES_ANO_SP = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: 'America/Sao_Paulo',
+  month: '2-digit',
+  year: 'numeric'
+})
+
+export function formatarMesAnoBr(isoUtc: string): string {
+  return FORMATADOR_MES_ANO_SP.format(new Date(isoUtc))
+}
+
+const FORMATADOR_DATA_CURTA_SP = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: 'America/Sao_Paulo',
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric'
+})
+
+/** Igual a `formatarDataBr`, mas pra timestamp UTC de verdade (ex.: `createdAt`) — não confundir com datas locais puras. */
+export function formatarDataCurtaUtc(isoUtc: string): string {
+  return FORMATADOR_DATA_CURTA_SP.format(new Date(isoUtc))
+}
+
 const STATUS_LABELS: Record<string, string> = {
   ativo: 'Ativo',
   pausado: 'Pausado',
