@@ -1,5 +1,6 @@
 import { ChevronLeft, Lock, NotebookText, Paperclip, User, Wallet } from 'lucide-react'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -47,7 +48,65 @@ function inputVazio(): PacienteInput {
 }
 
 export function PacienteFormScreen() {
-  const store = usePacientesStore()
+  // Exclui de propósito os campos que só a lista usa (pacientes, busca,
+  // filtros, ...) — esta tela só existe enquanto uma ficha está aberta
+  // (PacientesFlow desmonta uma ao montar a outra), mas selecionar só o que
+  // é lido aqui evita reacoplar as duas telas se isso mudar no futuro.
+  const store = usePacientesStore(
+    useShallow((s) => ({
+      pacienteEmEdicao: s.pacienteEmEdicao,
+      formError: s.formError,
+      formBusy: s.formBusy,
+      pendenciaFinanceira: s.pendenciaFinanceira,
+      salvarPaciente: s.salvarPaciente,
+      alterarStatus: s.alterarStatus,
+      voltarParaLista: s.voltarParaLista,
+
+      responsaveis: s.responsaveis,
+      criarResponsavel: s.criarResponsavel,
+      removerResponsavel: s.removerResponsavel,
+
+      evolucoes: s.evolucoes,
+      criarEvolucao: s.criarEvolucao,
+      retificarEvolucao: s.retificarEvolucao,
+      criarEvolucaoComSessaoRetroativa: s.criarEvolucaoComSessaoRetroativa,
+      prefillEvolucao: s.prefillEvolucao,
+      limparPrefillEvolucao: s.limparPrefillEvolucao,
+
+      anotacoes: s.anotacoes,
+      criarAnotacao: s.criarAnotacao,
+      atualizarAnotacao: s.atualizarAnotacao,
+      excluirAnotacao: s.excluirAnotacao,
+
+      recorrenciasRascunho: s.recorrenciasRascunho,
+      adicionarRecorrenciaRascunho: s.adicionarRecorrenciaRascunho,
+      removerRecorrenciaRascunho: s.removerRecorrenciaRascunho,
+      contratoRascunho: s.contratoRascunho,
+      setContratoRascunho: s.setContratoRascunho,
+      recorrenciasPaciente: s.recorrenciasPaciente,
+      adicionarRecorrenciaExistente: s.adicionarRecorrenciaExistente,
+      encerrarRecorrenciaExistente: s.encerrarRecorrenciaExistente,
+
+      contratoVigente: s.contratoVigente,
+      historicoContratos: s.historicoContratos,
+      lancamentos: s.lancamentos,
+      pagamentos: s.pagamentos,
+      reajustarContrato: s.reajustarContrato,
+      criarLancamentoAjuste: s.criarLancamentoAjuste,
+      cancelarLancamento: s.cancelarLancamento,
+      marcarReciboEmitido: s.marcarReciboEmitido,
+
+      anexos: s.anexos,
+      anexosLixeira: s.anexosLixeira,
+      anexosBusy: s.anexosBusy,
+      anexosError: s.anexosError,
+      anexarDocumento: s.anexarDocumento,
+      excluirAnexo: s.excluirAnexo,
+      restaurarAnexo: s.restaurarAnexo,
+      lerAnexoParaPreview: s.lerAnexoParaPreview,
+      salvarCopiaAnexo: s.salvarCopiaAnexo
+    }))
+  )
   const existente = store.pacienteEmEdicao
 
   const [form, setForm] = useState<PacienteInput>(() =>
@@ -77,12 +136,14 @@ export function PacienteFormScreen() {
     await store.alterarStatus({ status: novoStatus, motivoEncerramento: novoStatus === 'encerrado' ? motivoEncerramento : null })
   }
 
-  const contextoPartes = existente
+  const contextoPartes: ReactNode[] = existente
     ? [
         existente.dataNascimento ? `${calcularIdade(existente.dataNascimento)} anos` : null,
         existente.origem ? (ORIGEM_OPTIONS.find((o) => o.value === existente.origem)?.label ?? null) : null,
-        `Em atendimento desde ${formatarMesAnoBr(existente.createdAt)}`
-      ].filter(Boolean)
+        <>
+          Em atendimento desde <span className="font-mono">{formatarMesAnoBr(existente.createdAt)}</span>
+        </>
+      ].filter((parte) => parte !== null)
     : []
 
   const cadastroConteudo = (
@@ -130,6 +191,7 @@ export function PacienteFormScreen() {
                 <Label htmlFor="cpf">CPF</Label>
                 <Input
                   id="cpf"
+                  className="font-mono"
                   value={form.cpf ?? ''}
                   onChange={(event) => setForm({ ...form, cpf: event.target.value.replace(/\D/g, '') || null })}
                   maxLength={11}
@@ -139,6 +201,7 @@ export function PacienteFormScreen() {
                 <Label htmlFor="telefone">Telefone</Label>
                 <Input
                   id="telefone"
+                  className="font-mono"
                   value={form.telefone ?? ''}
                   onChange={(event) => setForm({ ...form, telefone: event.target.value || null })}
                 />
@@ -253,7 +316,17 @@ export function PacienteFormScreen() {
                   <h1 className="text-[22px] font-semibold tracking-[-0.01em] text-foreground">{existente.nomeSocial || existente.nome}</h1>
                   <Badge variant={STATUS_BADGE_VARIANT[existente.status]}>{formatarStatus(existente.status)}</Badge>
                 </div>
-                {contextoPartes.length > 0 && <p className="text-[13px] text-muted-foreground">{contextoPartes.join(' · ')}</p>}
+                {contextoPartes.length > 0 && (
+                  <p className="text-[13px] text-muted-foreground">
+                    {contextoPartes.map((parte, indice) => (
+                      // eslint-disable-next-line react/no-array-index-key
+                      <span key={indice}>
+                        {indice > 0 && ' · '}
+                        {parte}
+                      </span>
+                    ))}
+                  </p>
+                )}
               </div>
 
               <div className="flex items-center gap-2">

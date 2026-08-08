@@ -73,6 +73,14 @@ export function formatarParentesco(parentesco: string): string {
   return PARENTESCO_LABELS[parentesco] ?? parentesco
 }
 
+const MESES_ABREV = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ']
+
+/** 'YYYY-MM-DD' → 'MAR 2026' — rótulo de grupo de mês na timeline de evolução. String pura, mesma razão de formatarDataBr. */
+export function formatarMesAnoAbrevDeData(isoDate: string): string {
+  const [ano, mes] = isoDate.split('-')
+  return `${MESES_ABREV[Number(mes) - 1]} ${ano}`
+}
+
 const TIPO_EVOLUCAO_LABELS: Record<string, string> = {
   sessao: 'Sessão',
   contato: 'Contato',

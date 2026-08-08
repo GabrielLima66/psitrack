@@ -56,8 +56,10 @@ export function AtendimentoInicialSection({
         {recorrencias.map((rec, index) => (
           <div key={index} className="flex items-center justify-between rounded-md bg-muted px-3 py-2 text-sm">
             <span>
-              {formatarDiaSemanaAbrev(rec.diaSemana)} às {rec.horaLocal} · {rec.duracaoMin ?? 50}min ·{' '}
-              {rec.modalidade === 'presencial' ? 'Presencial' : 'Online'}
+              <span className="font-mono">
+                {formatarDiaSemanaAbrev(rec.diaSemana)} às {rec.horaLocal}
+              </span>{' '}
+              · {rec.duracaoMin ?? 50}min · {rec.modalidade === 'presencial' ? 'Presencial' : 'Online'}
             </span>
             <Button type="button" variant="ghost" size="sm" onClick={() => onRemover(index)}>
               Remover

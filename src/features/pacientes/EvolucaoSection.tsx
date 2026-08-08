@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { formatarDataBr, formatarDataHoraBr, formatarTipoEvolucao } from './formatters'
+import { formatarDataBr, formatarDataHoraBr, formatarMesAnoAbrevDeData, formatarTipoEvolucao } from './formatters'
 import type { CriarEvolucaoComSessaoRetroativaInput, CriarEvolucaoInput, Evolucao, RetificarEvolucaoInput, TipoEvolucao } from './types'
 
 interface EvolucaoSectionProps {
@@ -249,12 +249,30 @@ export function EvolucaoSection({
           const retificacao = retificadaPor.get(entrada.id)
           const original = entrada.retificaId ? porId.get(entrada.retificaId) : undefined
 
+          // Timeline é ordenada mais recente primeiro (evolucao.ts). O rótulo
+          // de mês só aparece quando se cruza pra um mês diferente do vizinho
+          // anterior no array — não precisa de agrupamento à parte.
+          const mesAnoAtual = formatarMesAnoAbrevDeData(entrada.dataSessao)
+          const mesAnoAnterior = indice > 0 ? formatarMesAnoAbrevDeData(evolucoes[indice - 1]!.dataSessao) : null
+          const mostrarRotuloMes = mesAnoAtual !== mesAnoAnterior
+
           return (
             <div
               key={entrada.id}
-              className={`flex gap-5 pb-5 ${indice > 0 ? 'pt-5' : ''} ${indice < evolucoes.length - 1 ? 'border-b border-border' : ''}`}
+              className={`flex gap-4 pb-5 ${indice > 0 ? 'pt-5' : ''} ${indice < evolucoes.length - 1 ? 'border-b border-border' : ''}`}
             >
-              <div className="flex w-[150px] shrink-0 flex-col items-end gap-0.5 border-r border-border pr-5 text-right">
+              <div className="w-10 shrink-0 pt-0.5 text-right">
+                {mostrarRotuloMes && (
+                  <span className="font-mono text-[11.5px] tracking-[0.08em] text-muted-foreground uppercase">{mesAnoAtual}</span>
+                )}
+              </div>
+
+              {/* border-r de cada entrada, empilhadas sem gap entre si, formam uma
+                  única linha contínua — a "espinha" da timeline. O quadrado marca
+                  cada entrada como um ponto discreto registrado nela (tick de
+                  régua, não bolinha de feed). */}
+              <div className="relative flex w-[136px] shrink-0 flex-col items-end gap-0.5 border-r border-border pr-4 text-right">
+                <span className="absolute top-[4px] right-[-3.5px] size-[7px] rounded-[2px] bg-primary ring-2 ring-card" />
                 <span className="font-mono text-[13.5px] font-medium text-foreground">{formatarDataBr(entrada.dataSessao)}</span>
                 <span className="text-xs text-muted-foreground">{formatarTipoEvolucao(entrada.tipo)}</span>
                 <span className="text-[11.5px] text-muted-foreground">registrado em {formatarDataHoraBr(entrada.createdAt)}</span>
