@@ -15,8 +15,7 @@ import { openDatabase, type PsiTrackDatabase } from '../db/connection'
 import { materializarTodasRecorrencias } from '../db/repositories/sessao'
 import { getAnexosDir, getBackupsDir, getConfigPath, getDbPath, getKeysFilePath, getMigrationsFolder } from '../paths'
 import { migrarComSeguranca } from '../backup/pre-migration'
-import { definirBaselineEscritas } from '../backup/estado'
-import { dispararBackupAutomaticoSeNecessario, totalChangesAtual } from '../backup/scheduler'
+import { definirBaselineEscritas, dispararBackupAutomaticoSeNecessario, totalChangesAtual } from '../backup/scheduler'
 import { safely } from './result'
 
 let db: PsiTrackDatabase | null = null

@@ -2,9 +2,8 @@ import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { PsiTrackDatabase } from '../db/connection'
 import { readSchemaVersion, runMigrations } from '../db/migrate'
-import { copiarBlobs, listarBlobsParaManifesto } from './blobs'
-import { createSnapshot } from './snapshot'
-import { getRowCounts, getSchemaVersion, verifySnapshot } from './verify'
+import { criarSnapshotVerificado } from './snapshot'
+import { getSchemaVersion } from './verify'
 
 export interface MigrarComSegurancaOptions {
   db: PsiTrackDatabase
@@ -37,16 +36,11 @@ export function migrarComSeguranca({ db, dek, migrationsFolder, backupDir, anexo
     const versaoAtual = getSchemaVersion(db.$client)
     if (versaoAtual < versaoAlvo) {
       mkdirSync(backupDir, { recursive: true })
-      const sourceRowCounts = getRowCounts(db.$client)
       const timestamp = Date.now()
       const snapshotPath = join(backupDir, `pre-migration-v${versaoAlvo}-${timestamp}.db`)
       const blobsDestDir = join(backupDir, `pre-migration-v${versaoAlvo}-${timestamp}-anexos`)
 
-      createSnapshot(db, snapshotPath)
-      const blobEntries = listarBlobsParaManifesto(db)
-      copiarBlobs(anexosDir, blobsDestDir, blobEntries)
-
-      const verification = verifySnapshot(snapshotPath, dek, sourceRowCounts, { entries: blobEntries, blobsDir: blobsDestDir })
+      const { verification } = criarSnapshotVerificado({ db, dek, destPath: snapshotPath, anexosDir, blobsDestDir })
       if (!verification.ok) {
         throw new Error(
           `Snapshot de segurança pré-migração falhou na verificação (${snapshotPath}). Migração abortada, banco original intacto.`

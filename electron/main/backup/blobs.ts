@@ -60,27 +60,50 @@ export function copiarBlobs(anexosDir: string, destDir: string, entries: BlobMan
   }
 }
 
-/** Confere cada entry do manifesto contra o que está de fato em `blobsDir`: presença, tamanho e hash — sem decifrar nada (D26). */
-export function verificarBlobs(entries: BlobManifestEntry[], blobsDir: string): { ok: boolean; problemas: string[] } {
+/**
+ * Presença + tamanho + hash de um conjunto de blobs, contra qualquer esquema
+ * de endereçamento em disco — local usa `{dir}/{id}.enc`, o pool do destino
+ * externo usa `{pool}/{sha256}.enc` (destinos.ts). O que muda entre os dois é
+ * só como resolver o caminho e como identificar a entrada nas mensagens de
+ * erro; a checagem em si (presença, tamanho com o authTag do GCM, hash) é a
+ * mesma, então vive uma vez só aqui.
+ */
+export function verificarPresencaTamanhoHash(
+  entries: BlobManifestEntry[],
+  caminhoDoBlob: (entrada: BlobManifestEntry) => string,
+  identificador: (entrada: BlobManifestEntry) => string,
+  descricaoAusente: string
+): { ok: boolean; problemas: string[] } {
   const problemas: string[] = []
 
   for (const entrada of entries) {
-    const caminho = caminhoBlob(blobsDir, entrada.id)
+    const caminho = caminhoDoBlob(entrada)
+    const id = identificador(entrada)
     if (!existsSync(caminho)) {
-      problemas.push(`${entrada.id}: arquivo ausente`)
+      problemas.push(`${id}: ${descricaoAusente}`)
       continue
     }
     const tamanhoEsperadoNoDisco = entrada.tamanhoBytes + AUTH_TAG_LENGTH_BYTES
     const tamanhoReal = statSync(caminho).size
     if (tamanhoReal !== tamanhoEsperadoNoDisco) {
-      problemas.push(`${entrada.id}: tamanho esperado ${tamanhoEsperadoNoDisco}, encontrado ${tamanhoReal}`)
+      problemas.push(`${id}: tamanho esperado ${tamanhoEsperadoNoDisco}, encontrado ${tamanhoReal}`)
       continue
     }
     const hashReal = createHash('sha256').update(readFileSync(caminho)).digest('hex')
     if (hashReal !== entrada.sha256Cifrado) {
-      problemas.push(`${entrada.id}: hash divergente`)
+      problemas.push(`${id}: hash divergente`)
     }
   }
 
   return { ok: problemas.length === 0, problemas }
+}
+
+/** Confere cada entry do manifesto contra o que está de fato em `blobsDir`: presença, tamanho e hash — sem decifrar nada (D26). */
+export function verificarBlobs(entries: BlobManifestEntry[], blobsDir: string): { ok: boolean; problemas: string[] } {
+  return verificarPresencaTamanhoHash(
+    entries,
+    (entrada) => caminhoBlob(blobsDir, entrada.id),
+    (entrada) => entrada.id,
+    'arquivo ausente'
+  )
 }

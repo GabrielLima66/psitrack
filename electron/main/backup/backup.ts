@@ -1,9 +1,8 @@
 import { copyFileSync } from 'node:fs'
-import { copiarBlobs, listarBlobsParaManifesto } from './blobs'
 import type { PsiTrackDatabase } from '../db/connection'
 import { writeManifest, type BackupManifest } from './manifest'
-import { createSnapshot } from './snapshot'
-import { getRowCounts, getSchemaVersion, verifySnapshot } from './verify'
+import { criarSnapshotVerificado } from './snapshot'
+import { getSchemaVersion } from './verify'
 
 export interface RunBackupOptions {
   db: PsiTrackDatabase
@@ -31,13 +30,7 @@ export interface RunBackupOptions {
 export function runBackup(options: RunBackupOptions): BackupManifest {
   const { db, dek, snapshotPath, keysFilePath, keysFileDestPath, manifestPath, anexosDir, blobsDestDir } = options
 
-  const sourceRowCounts = getRowCounts(db.$client)
-  createSnapshot(db, snapshotPath)
-
-  const blobEntries = listarBlobsParaManifesto(db)
-  copiarBlobs(anexosDir, blobsDestDir, blobEntries)
-
-  const verification = verifySnapshot(snapshotPath, dek, sourceRowCounts, { entries: blobEntries, blobsDir: blobsDestDir })
+  const { blobEntries, verification } = criarSnapshotVerificado({ db, dek, destPath: snapshotPath, anexosDir, blobsDestDir })
   copyFileSync(keysFilePath, keysFileDestPath)
 
   const manifest: BackupManifest = {

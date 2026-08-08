@@ -1,12 +1,11 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { resolve, sep, join } from 'node:path'
-import { createHash } from 'node:crypto'
-import { AUTH_TAG_LENGTH_BYTES, listarBlobsParaManifesto, type BlobManifestEntry } from './blobs'
+import { listarBlobsParaManifesto, verificarPresencaTamanhoHash, type BlobManifestEntry } from './blobs'
 import { criarBackupManual, type BackupListado } from './gerenciador'
 import { readManifest, writeManifest, type BackupManifest } from './manifest'
 import { createSnapshot } from './snapshot'
 import type { PsiTrackDatabase } from '../db/connection'
-import { getRowCounts, getSchemaVersion, verificarIntegridadeArquivo, type VerificationResult } from './verify'
+import { getRowCounts, getSchemaVersion, montarVerificationResult, verificarIntegridadeArquivo, type VerificationResult } from './verify'
 
 /**
  * `config.json` — só configuração de app não-sensível (caminho de pasta,
@@ -70,40 +69,14 @@ export function copiarParaPool(anexosDir: string, destino: string, entries: Blob
   }
 }
 
-/** Confere cada entry do manifesto contra o pool: presença, tamanho, hash — mesma lógica de `verificarBlobs`, endereçada por sha256 em vez de id. */
+/** Confere cada entry do manifesto contra o pool: presença, tamanho, hash — mesma checagem de `verificarBlobs`, endereçada por sha256 em vez de id. */
 export function verificarPool(entries: BlobManifestEntry[], destino: string): { ok: boolean; problemas: string[] } {
-  const problemas: string[] = []
-
-  for (const entrada of entries) {
-    const caminho = caminhoNoPool(destino, entrada.sha256Cifrado)
-    if (!existsSync(caminho)) {
-      problemas.push(`${entrada.sha256Cifrado}: arquivo ausente no pool`)
-      continue
-    }
-    const tamanhoEsperado = entrada.tamanhoBytes + AUTH_TAG_LENGTH_BYTES
-    const tamanhoReal = statSync(caminho).size
-    if (tamanhoReal !== tamanhoEsperado) {
-      problemas.push(`${entrada.sha256Cifrado}: tamanho esperado ${tamanhoEsperado}, encontrado ${tamanhoReal}`)
-      continue
-    }
-    const hashReal = createHash('sha256').update(readFileSync(caminho)).digest('hex')
-    if (hashReal !== entrada.sha256Cifrado) {
-      problemas.push(`${entrada.sha256Cifrado}: hash divergente`)
-    }
-  }
-
-  return { ok: problemas.length === 0, problemas }
-}
-
-function montarVerificationResult(
-  integridade: ReturnType<typeof verificarIntegridadeArquivo>,
-  blobs: { ok: boolean; problemas: string[] }
-): VerificationResult {
-  return {
-    ok: integridade.integrityCheck === 'ok' && integridade.cipherIntegrityCheckOk && integridade.rowCountsMatchSource && blobs.ok,
-    ...integridade,
-    blobs
-  }
+  return verificarPresencaTamanhoHash(
+    entries,
+    (entrada) => caminhoNoPool(destino, entrada.sha256Cifrado),
+    (entrada) => entrada.sha256Cifrado,
+    'arquivo ausente no pool'
+  )
 }
 
 function nomeArquivoSeguro(): string {

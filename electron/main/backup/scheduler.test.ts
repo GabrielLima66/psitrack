@@ -10,14 +10,16 @@ import { runMigrations } from '../db/migrate'
 import { criarPaciente } from '../db/repositories/pacientes'
 import { createTempDbPath } from '../db/test-support'
 import { gravarConfig } from './destinos'
-import { definirBaselineEscritas, marcarBackupAutomaticoConcluido, marcarBackupAutomaticoIniciado } from './estado'
 import { criarBackupManual } from './gerenciador'
 import { lerHistorico, type ExecucaoBackupAutomatico } from './historico'
 import { readManifest, writeManifest } from './manifest'
 import {
+  definirBaselineEscritas,
   deveExecutarBackupAutomatico,
   dispararBackupAutomaticoSeNecessario,
   houveEscritaNaSessao,
+  marcarBackupAutomaticoConcluido,
+  marcarBackupAutomaticoIniciado,
   totalChangesAtual
 } from './scheduler'
 
@@ -32,7 +34,7 @@ afterEach(() => {
   cleanup?.()
   cleanup = undefined
   marcarBackupAutomaticoConcluido() // garante que nenhum teste deixa a flag "presa" pro próximo
-  definirBaselineEscritas(0) // idem pra baseline — estado.ts é módulo singleton, vaza entre testes senão
+  definirBaselineEscritas(0) // idem pra baseline — scheduler.ts guarda os dois em módulo singleton, vaza entre testes senão
 })
 
 function pastaVazia(prefixo = 'psitrack-'): string {

@@ -176,7 +176,7 @@ describe('migrarComSeguranca', () => {
 
   it('falha do próprio snapshot (ex.: disco cheio) aborta sem deixar banco meio-migrado', async () => {
     vi.doMock('./snapshot', () => ({
-      createSnapshot: vi.fn(() => {
+      criarSnapshotVerificado: vi.fn(() => {
         throw new Error('ENOSPC: no space left on device (simulado)')
       })
     }))

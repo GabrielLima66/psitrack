@@ -74,6 +74,23 @@ export function verificarIntegridadeArquivo(filePath: string, dek: Buffer, sourc
 }
 
 /**
+ * Combina integridade de arquivo + checagem de blobs em um `VerificationResult`
+ * — reaproveitado por `destinos.ts`, que confere blobs contra o pool
+ * endereçado por sha256 em vez de `verificarBlobs`, mas chega ao mesmo
+ * formato de resultado.
+ */
+export function montarVerificationResult(
+  integridade: IntegridadeArquivo,
+  blobs: { ok: boolean; problemas: string[] }
+): VerificationResult {
+  return {
+    ok: integridade.integrityCheck === 'ok' && integridade.cipherIntegrityCheckOk && integridade.rowCountsMatchSource && blobs.ok,
+    ...integridade,
+    blobs
+  }
+}
+
+/**
  * `blobCheck` é opcional — call sites sem anexo pra conferir (ou de antes da
  * Etapa 15) continuam funcionando sem passar nada, e `blobs.ok` fica `true`
  * por não ter o que reprovar.
@@ -86,10 +103,5 @@ export function verifySnapshot(
 ): VerificationResult {
   const integridade = verificarIntegridadeArquivo(filePath, dek, sourceRowCounts)
   const blobs = blobCheck ? verificarBlobs(blobCheck.entries, blobCheck.blobsDir) : { ok: true, problemas: [] }
-
-  return {
-    ok: integridade.integrityCheck === 'ok' && integridade.cipherIntegrityCheckOk && integridade.rowCountsMatchSource && blobs.ok,
-    ...integridade,
-    blobs
-  }
+  return montarVerificationResult(integridade, blobs)
 }
