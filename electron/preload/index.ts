@@ -458,7 +458,9 @@ export interface ExecucaoBackupAutomatico {
 
 const api = {
   app: {
-    getVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion')
+    getVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion'),
+    /** Abre a página de releases no navegador do sistema — só dispara com clique explícito, nunca automático (invariante de segurança #7 do CLAUDE.md). */
+    verificarAtualizacoes: (): Promise<void> => ipcRenderer.invoke('app:verificarAtualizacoes')
   },
   vault: {
     status: (): Promise<{ exists: boolean }> => ipcRenderer.invoke('vault:status'),

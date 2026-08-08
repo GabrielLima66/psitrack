@@ -1,4 +1,12 @@
-import { app, ipcMain } from 'electron'
+import { app, ipcMain, shell } from 'electron'
+
+/**
+ * URL fixa no main — o renderer nunca escolhe o destino. Verificação é
+ * 100% manual (usuário clica) e sai pelo navegador do sistema via
+ * shell.openExternal; o processo do app não faz nenhuma requisição de
+ * rede (CLAUDE.md invariante de segurança #7 — "sem rede").
+ */
+const URL_RELEASES = 'https://github.com/GabrielLima66/psitrack/releases'
 
 /**
  * Handlers do domínio "app": informação não sensível sobre o processo main.
@@ -7,4 +15,5 @@ import { app, ipcMain } from 'electron'
  */
 export function registerAppHandlers(): void {
   ipcMain.handle('app:getVersion', () => app.getVersion())
+  ipcMain.handle('app:verificarAtualizacoes', () => shell.openExternal(URL_RELEASES))
 }
