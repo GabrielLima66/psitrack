@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { AutoLockScreen } from './AutoLockScreen'
 import { CreateMasterPasswordScreen } from './CreateMasterPasswordScreen'
 import { RecoveryKeyRevealScreen } from './RecoveryKeyRevealScreen'
@@ -13,7 +14,24 @@ interface VaultFlowProps {
 
 /** Decide qual das telas de auth mostrar, ou o app de verdade, com base no estado do vault. */
 export function VaultFlow({ children }: VaultFlowProps) {
-  const store = useVaultStore()
+  const store = useVaultStore(
+    useShallow((s) => ({
+      screen: s.screen,
+      authBusy: s.authBusy,
+      authError: s.authError,
+      pendingRecoveryKey: s.pendingRecoveryKey,
+      lastSection: s.lastSection,
+      checkStatus: s.checkStatus,
+      onAutoLocked: s.onAutoLocked,
+      unlock: s.unlock,
+      unlockWithRecovery: s.unlockWithRecovery,
+      createPassword: s.createPassword,
+      completeRecoverySetup: s.completeRecoverySetup,
+      finishRecoveryKeyReveal: s.finishRecoveryKeyReveal,
+      goToRecoveryUnlock: s.goToRecoveryUnlock,
+      goToPasswordUnlock: s.goToPasswordUnlock
+    }))
+  )
 
   useEffect(() => {
     void store.checkStatus()

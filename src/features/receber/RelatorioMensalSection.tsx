@@ -1,5 +1,6 @@
 import { ExternalLink } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -14,7 +15,17 @@ import { useReceberStore } from './store'
  * competência — troquei por "Lançamentos pendentes" (contagem real).
  */
 export function RelatorioMensalSection() {
-  const store = useReceberStore()
+  const store = useReceberStore(
+    useShallow((s) => ({
+      carregarRelatorio: s.carregarRelatorio,
+      competenciaRelatorio: s.competenciaRelatorio,
+      exportarCsv: s.exportarCsv,
+      pendentes: s.pendentes,
+      relatorio: s.relatorio,
+      relatorioError: s.relatorioError,
+      setCompetenciaRelatorio: s.setCompetenciaRelatorio
+    }))
+  )
   const [mensagemExport, setMensagemExport] = useState<string | null>(null)
 
   useEffect(() => {
@@ -47,7 +58,7 @@ export function RelatorioMensalSection() {
           <Input
             id="receber-competencia"
             type="month"
-            className="h-[34px] w-36"
+            className="h-[34px] w-48"
             value={store.competenciaRelatorio}
             onChange={(e) => store.setCompetenciaRelatorio(e.target.value)}
           />

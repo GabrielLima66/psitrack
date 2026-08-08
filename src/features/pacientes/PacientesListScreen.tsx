@@ -1,5 +1,6 @@
 import { Search, TriangleAlert } from 'lucide-react'
 import { useEffect } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,7 +20,24 @@ const LARGURAS_SKELETON = ['70%', '45%', '85%', '55%', '65%', '40%', '75%']
 
 /** Tela inicial pós-desbloqueio (SPEC-fase-1.md Etapa 6). Nenhum conteúdo clínico aparece aqui — nem preview de evolução. */
 export function PacientesListScreen() {
-  const store = usePacientesStore()
+  const store = usePacientesStore(
+    useShallow((s) => ({
+      pacientes: s.pacientes,
+      loading: s.loading,
+      listError: s.listError,
+      filtroStatus: s.filtroStatus,
+      filtroArquivados: s.filtroArquivados,
+      busca: s.busca,
+      carregarPacientes: s.carregarPacientes,
+      setFiltroStatus: s.setFiltroStatus,
+      setFiltroArquivados: s.setFiltroArquivados,
+      setBusca: s.setBusca,
+      abrirNovoPaciente: s.abrirNovoPaciente,
+      abrirEdicaoPaciente: s.abrirEdicaoPaciente,
+      arquivar: s.arquivar,
+      restaurar: s.restaurar
+    }))
+  )
 
   useEffect(() => {
     void store.carregarPacientes()

@@ -1,5 +1,6 @@
 import { Lock } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -28,7 +29,43 @@ const ABAS: { id: AbaConfiguracoes; label: string; subtitulo: string }[] = [
 
 /** Tela "Configurações" (Etapas 17-21): backup manual local + destino externo, retenção/purga, restore e scheduler automático, com snapshot de segurança automático antes de sobrescrever, e informações do app. */
 export function ConfiguracoesScreen() {
-  const store = useConfiguracoesStore()
+  // Exclui de propósito os campos de `avisoBackupAutomatico`/`fechandoComBackup`
+  // (e as ações que os mudam) — esses pertencem a `BackupAutomaticoOverlay`,
+  // que já assina só os seus próprios campos; sem essa exclusão, o scheduler
+  // automático rodando em segundo plano re-renderizaria esta tela à toa.
+  const store = useConfiguracoesStore(
+    useShallow((s) => ({
+      backups: s.backups,
+      loading: s.loading,
+      error: s.error,
+      criando: s.criando,
+      verificando: s.verificando,
+      verificandoBusy: s.verificandoBusy,
+      restaurando: s.restaurando,
+      ultimaRestauracao: s.ultimaRestauracao,
+      versao: s.versao,
+      destino: s.destino,
+      ultimoBackupExternoEm: s.ultimoBackupExternoEm,
+      configurandoDestino: s.configurandoDestino,
+      destinoError: s.destinoError,
+      avisoDestino: s.avisoDestino,
+      verificacaoDestino: s.verificacaoDestino,
+      verificandoDestino: s.verificandoDestino,
+      previewPurga: s.previewPurga,
+      purgando: s.purgando,
+      purgaError: s.purgaError,
+      ultimaPurga: s.ultimaPurga,
+      historico: s.historico,
+      carregar: s.carregar,
+      criarBackup: s.criarBackup,
+      verificar: s.verificar,
+      restaurar: s.restaurar,
+      configurarDestino: s.configurarDestino,
+      removerDestino: s.removerDestino,
+      verificarDestino: s.verificarDestino,
+      executarPurga: s.executarPurga
+    }))
+  )
   const { aparencia, definirAparencia } = useThemeStore()
   const [aba, setAba] = useState<AbaConfiguracoes>('backup')
 
@@ -207,17 +244,30 @@ export function ConfiguracoesScreen() {
 
           {aba === 'sobre' && (
             <>
-              <div className="flex items-center gap-3 rounded-[0.625rem] border border-border bg-card p-[16px_18px]">
-                <div className="flex size-[34px] shrink-0 items-center justify-center rounded-[8px] bg-primary text-[15px] font-semibold text-primary-foreground">
-                  P
+              <div className="flex items-center justify-between gap-4 rounded-[0.625rem] border border-border bg-card p-[16px_18px]">
+                <div className="flex items-center gap-3">
+                  <div className="flex size-[34px] shrink-0 items-center justify-center rounded-[8px] bg-primary text-[15px] font-semibold text-primary-foreground">
+                    P
+                  </div>
+                  <div>
+                    <p className="text-[14.5px] font-semibold text-foreground">PsiTrack{store.versao ? ` · versão ${store.versao}` : ''}</p>
+                    <p className="text-[12.5px] text-muted-foreground">
+                      Este app não faz nenhuma chamada de rede. Todos os dados ficam cifrados no disco desta máquina.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-[14.5px] font-semibold text-foreground">PsiTrack{store.versao ? ` · versão ${store.versao}` : ''}</p>
-                  <p className="text-[12.5px] text-muted-foreground">
-                    Este app não faz nenhuma chamada de rede. Todos os dados ficam cifrados no disco desta máquina.
-                  </p>
-                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-[34px] shrink-0"
+                  onClick={() => void window.psitrack.app.verificarAtualizacoes()}
+                >
+                  Verificar atualizações
+                </Button>
               </div>
+              <p className="-mt-2 text-[12px] text-muted-foreground">
+                Abre a página de versões no seu navegador — verificação manual, nunca automática. Requer internet só no momento do clique.
+              </p>
 
               <div className="flex items-center justify-between gap-4 rounded-[0.625rem] border border-border bg-card p-[16px_18px]">
                 <div>

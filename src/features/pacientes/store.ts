@@ -237,6 +237,12 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
       lancamentos: [],
       pagamentos: []
     })
+    // Financeiro/Documentos só dependem do id (já setado acima), não do
+    // resultado das 4 chamadas abaixo — dispara em paralelo com elas em vez
+    // de encadeado depois, senão a ficha paga dois round-trips IPC em série
+    // pra só abrir.
+    void get().carregarFinanceiro()
+    void get().carregarAnexos()
     const [responsaveis, evolucoes, anotacoes, recorrencias] = await Promise.all([
       window.psitrack.responsavel.listar(paciente.id),
       window.psitrack.evolucao.listar(paciente.id),
@@ -247,8 +253,6 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
     if (evolucoes.ok) set({ evolucoes: evolucoes.evolucoes })
     if (anotacoes.ok) set({ anotacoes: anotacoes.anotacoes })
     if (recorrencias.ok) set({ recorrenciasPaciente: recorrencias.recorrencias })
-    void get().carregarFinanceiro()
-    void get().carregarAnexos()
   },
 
   voltarParaLista: () => {

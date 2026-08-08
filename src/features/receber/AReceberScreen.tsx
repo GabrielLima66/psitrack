@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { formatarCompetencia } from '../pacientes/formatters'
 import { PacientePendenteGrupo } from './PacientePendenteGrupo'
 import { RelatorioMensalSection } from './RelatorioMensalSection'
@@ -6,7 +7,17 @@ import { useReceberStore } from './store'
 
 /** Tela "A receber" (Etapa 13) — pendentes agrupados por paciente, whole-consultório, não vinculada a uma ficha específica. */
 export function AReceberScreen() {
-  const store = useReceberStore()
+  const store = useReceberStore(
+    useShallow((s) => ({
+      carregar: s.carregar,
+      competenciaRelatorio: s.competenciaRelatorio,
+      error: s.error,
+      loading: s.loading,
+      pendentes: s.pendentes,
+      contratos: s.contratos,
+      selecionados: s.selecionados
+    }))
+  )
 
   useEffect(() => {
     void store.carregar()

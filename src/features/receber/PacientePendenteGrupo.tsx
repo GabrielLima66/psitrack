@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -34,7 +35,15 @@ function hoje(): string {
  * pré-selecionada (feito em selecaoPadrao no store) — aqui só exibe.
  */
 export function PacientePendenteGrupo({ pacienteId, pacienteNome, lancamentos, contrato, selecionados }: PacientePendenteGrupoProps) {
-  const store = useReceberStore()
+  const store = useReceberStore(
+    useShallow((s) => ({
+      registrandoPacienteId: s.registrandoPacienteId,
+      abrirRegistrar: s.abrirRegistrar,
+      registrarPagamento: s.registrarPagamento,
+      fecharRegistrar: s.fecharRegistrar,
+      toggleSelecionado: s.toggleSelecionado
+    }))
+  )
   const registrando = store.registrandoPacienteId === pacienteId
 
   const [data, setData] = useState(hoje())

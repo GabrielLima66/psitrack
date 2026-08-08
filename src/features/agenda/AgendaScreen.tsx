@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight, Clock } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -11,6 +12,61 @@ import { SessaoCard } from './SessaoCard'
 import { useAgendaStore } from './store'
 import { diaSemanaLocal, hojeLocal, inicioDaSemana, somarDias, utcParaDataLocal } from './tempo'
 
+// Geometria da grade é função só de constantes (COPIAS, rotulosHora()) — nunca
+// muda entre renders, então é computada uma vez aqui em vez de recalculada
+// (e, pro caso das linhas/rótulos, recriada como elementos novos) a cada render.
+const ROTULOS = rotulosHora()
+const ALTURA = alturaTotal()
+const COPIAS_ARR = Array.from({ length: COPIAS }, (_, i) => i)
+
+/** Rótulos da régua da esquerda — array de elementos fixo, reaproveitado (nunca recriado) em todo render. */
+const RUAS_HORA = COPIAS_ARR.flatMap((copia) =>
+  ROTULOS.map((rotulo) => (
+    <span
+      key={`${copia}-${rotulo}`}
+      className="absolute right-[9px] font-mono text-[11px] text-muted-foreground"
+      style={{ top: posYCiclico(rotulo, copia) - 6 }}
+    >
+      {rotulo}
+    </span>
+  ))
+)
+
+/** Linhas horizontais de hora — idênticas em toda coluna de dia; um array só, reaproveitado nas 7 colunas em vez de recriado por coluna e por render. */
+const LINHAS_HORA = COPIAS_ARR.flatMap((copia) =>
+  ROTULOS.map((rotulo) => (
+    <div key={`${copia}-${rotulo}`} className="absolute right-0 left-0 h-px bg-border" style={{ top: posYCiclico(rotulo, copia) }} />
+  ))
+)
+
+/**
+ * Linha + ponto + chip de "agora". O relógio de 1 min mora aqui dentro (não
+ * em AgendaScreen) — só este pedacinho da grade re-renderiza a cada minuto,
+ * em vez da tela inteira (cabeçalhos, régua, linhas de hora e sessões).
+ */
+function IndicadorAgora() {
+  const [agoraHHMM, setAgoraHHMM] = useState(() => formatarHoraLocal(new Date().toISOString()))
+
+  useEffect(() => {
+    const id = setInterval(() => setAgoraHHMM(formatarHoraLocal(new Date().toISOString())), 60_000)
+    return () => clearInterval(id)
+  }, [])
+
+  return (
+    <>
+      {COPIAS_ARR.map((copia) => (
+        <div key={copia}>
+          <div className="pointer-events-none absolute right-0 left-0 z-[3] h-0.5 bg-primary" style={{ top: posYCiclico(agoraHHMM, copia) }} />
+          <div
+            className="pointer-events-none absolute z-[4] size-[7px] rounded-full bg-primary"
+            style={{ top: posYCiclico(agoraHHMM, copia) - 3, left: -3 }}
+          />
+        </div>
+      ))}
+    </>
+  )
+}
+
 /**
  * Agenda do consultório inteiro — não é vinculada a um paciente específico
  * (visão semanal é o padrão, diária é alternativa). Só mostra logística
@@ -21,12 +77,55 @@ import { diaSemanaLocal, hojeLocal, inicioDaSemana, somarDias, utcParaDataLocal 
  * cards empilhados por coluna, sem eixo de tempo.
  */
 export function AgendaScreen() {
-  const store = useAgendaStore()
-  const [agoraHHMM, setAgoraHHMM] = useState(() => formatarHoraLocal(new Date().toISOString()))
+  const {
+    visao,
+    dataReferencia,
+    sessoes,
+    error,
+    sessaoSelecionadaId,
+    novaSessaoAberta,
+    pacientesDisponiveis,
+    pendenciaFinanceira,
+    carregar,
+    mudarVisao,
+    voltar,
+    irParaHoje,
+    avancar,
+    abrirNovaSessao,
+    selecionarSessao,
+    criarSessaoAvulsa,
+    fecharNovaSessao,
+    alterarStatus,
+    remarcar,
+    registrarEvolucao
+  } = useAgendaStore(
+    useShallow((s) => ({
+      visao: s.visao,
+      dataReferencia: s.dataReferencia,
+      sessoes: s.sessoes,
+      error: s.error,
+      sessaoSelecionadaId: s.sessaoSelecionadaId,
+      novaSessaoAberta: s.novaSessaoAberta,
+      pacientesDisponiveis: s.pacientesDisponiveis,
+      pendenciaFinanceira: s.pendenciaFinanceira,
+      carregar: s.carregar,
+      mudarVisao: s.mudarVisao,
+      voltar: s.voltar,
+      irParaHoje: s.irParaHoje,
+      avancar: s.avancar,
+      abrirNovaSessao: s.abrirNovaSessao,
+      selecionarSessao: s.selecionarSessao,
+      criarSessaoAvulsa: s.criarSessaoAvulsa,
+      fecharNovaSessao: s.fecharNovaSessao,
+      alterarStatus: s.alterarStatus,
+      remarcar: s.remarcar,
+      registrarEvolucao: s.registrarEvolucao
+    }))
+  )
   const gradeRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    void store.carregar()
+    void carregar()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -46,35 +145,29 @@ export function AgendaScreen() {
 
   // Com o rolamento infinito é fácil descer demais e perder onde estava —
   // este botão retoma exatamente no horário vigente (com uma folga de 80px
-  // acima, pra "agora" não colar na borda de cima da grade).
+  // acima, pra "agora" não colar na borda de cima da grade). Calcula a hora
+  // atual na hora do clique em vez de ler de um state reativo — não precisa
+  // re-renderizar nada só pra responder "que horas são agora".
   function handleIrParaAgora(): void {
-    if (!diasVisiveis.includes(hoje)) store.irParaHoje()
+    if (!diasVisiveis.includes(hoje)) irParaHoje()
     const el = gradeRef.current
-    if (el) el.scrollTop = posYCiclico(agoraHHMM, Math.floor(COPIAS / 2)) - 80
+    if (el) el.scrollTop = posYCiclico(formatarHoraLocal(new Date().toISOString()), Math.floor(COPIAS / 2)) - 80
   }
 
-  useEffect(() => {
-    const id = setInterval(() => setAgoraHHMM(formatarHoraLocal(new Date().toISOString())), 60_000)
-    return () => clearInterval(id)
-  }, [])
-
-  const diasDaSemana = Array.from({ length: 7 }, (_, i) => somarDias(inicioDaSemana(store.dataReferencia), i))
-  const diasVisiveis = store.visao === 'semana' ? diasDaSemana : [store.dataReferencia]
-  const sessaoSelecionada = store.sessoes.find((s) => s.id === store.sessaoSelecionadaId) ?? null
+  const diasDaSemana = Array.from({ length: 7 }, (_, i) => somarDias(inicioDaSemana(dataReferencia), i))
+  const diasVisiveis = visao === 'semana' ? diasDaSemana : [dataReferencia]
+  const sessaoSelecionada = sessoes.find((s) => s.id === sessaoSelecionadaId) ?? null
   const hoje = hojeLocal()
   const semanaContemHoje = diasVisiveis.includes(hoje)
-  const rotulos = rotulosHora()
-  const altura = alturaTotal()
-  const copias = Array.from({ length: COPIAS }, (_, i) => i)
 
   function sessoesDoDia(dataYMD: string) {
-    return store.sessoes.filter((s) => utcParaDataLocal(s.inicioUtc) === dataYMD)
+    return sessoes.filter((s) => utcParaDataLocal(s.inicioUtc) === dataYMD)
   }
 
   const contexto =
-    store.visao === 'semana'
-      ? `${formatarIntervaloDatas(diasDaSemana[0]!, diasDaSemana[6]!)} · ${store.sessoes.length} sessões`
-      : `${formatarDiaSemanaAbrev(diaSemanaLocal(store.dataReferencia))} ${formatarDataCurta(store.dataReferencia)} · ${store.sessoes.length} sessões`
+    visao === 'semana'
+      ? `${formatarIntervaloDatas(diasDaSemana[0]!, diasDaSemana[6]!)} · ${sessoes.length} sessões`
+      : `${formatarDiaSemanaAbrev(diaSemanaLocal(dataReferencia))} ${formatarDataCurta(dataReferencia)} · ${sessoes.length} sessões`
 
   return (
     <div className="flex h-full flex-col overflow-hidden px-7 py-6">
@@ -89,20 +182,20 @@ export function AgendaScreen() {
             <div className="inline-flex h-[34px] items-stretch overflow-hidden rounded-md border border-border">
               <button
                 type="button"
-                onClick={() => store.mudarVisao('semana')}
+                onClick={() => mudarVisao('semana')}
                 className={cn(
                   'px-3 text-[13px] font-medium transition-colors',
-                  store.visao === 'semana' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'
+                  visao === 'semana' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'
                 )}
               >
                 Semana
               </button>
               <button
                 type="button"
-                onClick={() => store.mudarVisao('dia')}
+                onClick={() => mudarVisao('dia')}
                 className={cn(
                   'border-l border-border px-3 text-[13px] font-medium transition-colors',
-                  store.visao === 'dia' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'
+                  visao === 'dia' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'
                 )}
               >
                 Dia
@@ -110,17 +203,17 @@ export function AgendaScreen() {
             </div>
 
             <div className="inline-flex h-[34px] items-stretch overflow-hidden rounded-md border border-border">
-              <button type="button" onClick={store.voltar} className="flex items-center px-2 text-muted-foreground hover:bg-accent" aria-label="Anterior">
+              <button type="button" onClick={voltar} className="flex items-center px-2 text-muted-foreground hover:bg-accent" aria-label="Anterior">
                 <ChevronLeft className="size-4" />
               </button>
               <button
                 type="button"
-                onClick={store.irParaHoje}
+                onClick={irParaHoje}
                 className="border-x border-border px-3 text-[13px] font-medium text-foreground hover:bg-accent"
               >
                 Hoje
               </button>
-              <button type="button" onClick={store.avancar} className="flex items-center px-2 text-muted-foreground hover:bg-accent" aria-label="Próxima">
+              <button type="button" onClick={avancar} className="flex items-center px-2 text-muted-foreground hover:bg-accent" aria-label="Próxima">
                 <ChevronRight className="size-4" />
               </button>
             </div>
@@ -130,16 +223,16 @@ export function AgendaScreen() {
               Agora
             </Button>
 
-            <Button type="button" className="h-[34px]" onClick={() => void store.abrirNovaSessao()}>
+            <Button type="button" className="h-[34px]" onClick={() => void abrirNovaSessao()}>
               Nova sessão avulsa
             </Button>
           </div>
         </div>
 
-        {store.error && <p className="text-sm text-destructive">{store.error}</p>}
-        {store.pendenciaFinanceira && (
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        {pendenciaFinanceira && (
           <Alert variant="warn">
-            <AlertDescription>{store.pendenciaFinanceira}</AlertDescription>
+            <AlertDescription>{pendenciaFinanceira}</AlertDescription>
           </Alert>
         )}
       </div>
@@ -148,18 +241,8 @@ export function AgendaScreen() {
         <div className="flex">
           <div className="sticky left-0 z-10 w-[58px] shrink-0 border-r border-border bg-card">
             <div className="sticky top-0 z-20 h-[42px] border-b border-border bg-muted" />
-            <div className="relative" style={{ height: altura }}>
-              {copias.flatMap((copia) =>
-                rotulos.map((rotulo) => (
-                  <span
-                    key={`${copia}-${rotulo}`}
-                    className="absolute right-[9px] font-mono text-[11px] text-muted-foreground"
-                    style={{ top: posYCiclico(rotulo, copia) - 6 }}
-                  >
-                    {rotulo}
-                  </span>
-                ))
-              )}
+            <div className="relative" style={{ height: ALTURA }}>
+              {RUAS_HORA}
             </div>
           </div>
 
@@ -178,35 +261,18 @@ export function AgendaScreen() {
                     <span className="font-mono text-[13.5px] font-medium">{formatarDataCurta(dia)}</span>
                   </div>
 
-                  <div className={cn('relative', ehHoje && 'bg-muted/40')} style={{ minHeight: altura }}>
-                    {copias.flatMap((copia) =>
-                      rotulos.map((rotulo) => (
-                        <div key={`${copia}-${rotulo}`} className="absolute right-0 left-0 h-px bg-border" style={{ top: posYCiclico(rotulo, copia) }} />
-                      ))
-                    )}
+                  <div className={cn('relative', ehHoje && 'bg-muted/40')} style={{ minHeight: ALTURA }}>
+                    {LINHAS_HORA}
 
-                    {ehHoje &&
-                      semanaContemHoje &&
-                      copias.map((copia) => (
-                        <div key={copia}>
-                          <div
-                            className="pointer-events-none absolute right-0 left-0 z-[3] h-0.5 bg-primary"
-                            style={{ top: posYCiclico(agoraHHMM, copia) }}
-                          />
-                          <div
-                            className="pointer-events-none absolute z-[4] size-[7px] rounded-full bg-primary"
-                            style={{ top: posYCiclico(agoraHHMM, copia) - 3, left: -3 }}
-                          />
-                        </div>
-                      ))}
+                    {ehHoje && semanaContemHoje && <IndicadorAgora />}
 
                     {sessoesDoDia(dia).flatMap((sessao) =>
-                      copias.map((copia) => (
+                      COPIAS_ARR.map((copia) => (
                         <SessaoCard
                           key={`${sessao.id}-${copia}`}
                           sessao={sessao}
-                          selecionada={sessao.id === store.sessaoSelecionadaId}
-                          onSelecionar={() => store.selecionarSessao(sessao.id)}
+                          selecionada={sessao.id === sessaoSelecionadaId}
+                          onSelecionar={() => selecionarSessao(sessao.id)}
                           top={posYCiclico(formatarHoraLocal(sessao.inicioUtc), copia)}
                           height={Math.max((sessao.duracaoMin / 60) * 48 - 3, 18)}
                         />
@@ -220,9 +286,9 @@ export function AgendaScreen() {
         </div>
       </div>
 
-      {store.novaSessaoAberta && (
+      {novaSessaoAberta && (
         <div className="mt-4">
-          <NovaSessaoForm pacientes={store.pacientesDisponiveis} onCriar={store.criarSessaoAvulsa} onCancelar={store.fecharNovaSessao} />
+          <NovaSessaoForm pacientes={pacientesDisponiveis} onCriar={criarSessaoAvulsa} onCancelar={fecharNovaSessao} />
         </div>
       )}
 
@@ -230,14 +296,14 @@ export function AgendaScreen() {
         <div className="mt-4">
           <PainelSessao
             sessao={sessaoSelecionada}
-            onFechar={() => store.selecionarSessao(null)}
+            onFechar={() => selecionarSessao(null)}
             onAlterarStatus={async (status, motivo) => {
-              await store.alterarStatus(sessaoSelecionada.id, { status, motivo: motivo || null })
+              await alterarStatus(sessaoSelecionada.id, { status, motivo: motivo || null })
             }}
             onRemarcar={async (dataLocal, horaLocal) => {
-              await store.remarcar(sessaoSelecionada.id, { dataLocal, horaLocal })
+              await remarcar(sessaoSelecionada.id, { dataLocal, horaLocal })
             }}
-            onRegistrarEvolucao={() => store.registrarEvolucao(sessaoSelecionada)}
+            onRegistrarEvolucao={() => registrarEvolucao(sessaoSelecionada)}
           />
         </div>
       )}
