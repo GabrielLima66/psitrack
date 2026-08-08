@@ -42,6 +42,11 @@
 }
 
 :root {
+  /* Sinaliza pro Chromium desenhar controles nativos (calendário de
+     input[type=date/month], scrollbar) no tema certo — sem isso eles
+     ficam sempre claros, mesmo com o resto do app em .dark. */
+  color-scheme: light;
+
   --font-sans: 'Geist', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'Geist Mono', ui-monospace, monospace;
 
@@ -83,6 +88,8 @@
 }
 
 .dark {
+  color-scheme: dark;
+
   --background: oklch(0.165 0.008 255);
   --foreground: oklch(0.962 0.003 255);
   --card: oklch(0.208 0.011 255);
