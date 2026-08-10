@@ -1,5 +1,5 @@
 import { ChevronLeft, Lock, NotebookText, Paperclip, User, Wallet } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -86,11 +86,13 @@ export function PacienteFormScreen() {
       recorrenciasPaciente: s.recorrenciasPaciente,
       adicionarRecorrenciaExistente: s.adicionarRecorrenciaExistente,
       encerrarRecorrenciaExistente: s.encerrarRecorrenciaExistente,
+      verificarConflitosRecorrencia: s.verificarConflitosRecorrencia,
 
       contratoVigente: s.contratoVigente,
       historicoContratos: s.historicoContratos,
       lancamentos: s.lancamentos,
       pagamentos: s.pagamentos,
+      carregarFinanceiro: s.carregarFinanceiro,
       reajustarContrato: s.reajustarContrato,
       criarLancamentoAjuste: s.criarLancamentoAjuste,
       cancelarLancamento: s.cancelarLancamento,
@@ -108,6 +110,17 @@ export function PacienteFormScreen() {
     }))
   )
   const existente = store.pacienteEmEdicao
+
+  // Financeiro (lançamentos/contrato vigente) muda por ações de FORA desta
+  // tela — marcar sessão realizada na Agenda, registrar pagamento em A
+  // receber — e esta tela não desmonta sozinha ao trocar de área: `screen`
+  // mora no store e continua 'form' se a usuária não clicar "Voltar". Sem
+  // isso, reabrir a área Pacientes com a ficha ainda "aberta" mostra os
+  // dados de financeiro de antes da ação feita em outra tela.
+  useEffect(() => {
+    if (existente) void store.carregarFinanceiro()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [existente?.id])
 
   const [form, setForm] = useState<PacienteInput>(() =>
     existente
@@ -252,6 +265,7 @@ export function PacienteFormScreen() {
           onRemover={store.removerRecorrenciaRascunho}
           contrato={store.contratoRascunho}
           onContratoChange={store.setContratoRascunho}
+          onVerificarConflitos={store.verificarConflitosRecorrencia}
         />
       )}
 
@@ -260,6 +274,7 @@ export function PacienteFormScreen() {
           recorrencias={store.recorrenciasPaciente}
           onAdicionar={store.adicionarRecorrenciaExistente}
           onEncerrar={store.encerrarRecorrenciaExistente}
+          onVerificarConflitos={store.verificarConflitosRecorrencia}
         />
       )}
 

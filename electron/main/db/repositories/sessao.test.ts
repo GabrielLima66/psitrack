@@ -6,10 +6,11 @@ import { openDatabase, type PsiTrackDatabase } from '../connection'
 import { runMigrations } from '../migrate'
 import { createTempDbPath } from '../test-support'
 import { criarPaciente } from './pacientes'
-import { criarRecorrencia, type Recorrencia } from './recorrencia'
+import { criarRecorrencia, listarRecorrencias, type Recorrencia } from './recorrencia'
 import {
   alterarStatusSessao,
   criarSessaoAvulsa,
+  encerrarAgendaDoPaciente,
   encerrarSerie,
   listarSessoesPeriodo,
   materializarRecorrencia,
@@ -183,5 +184,58 @@ describe('sobreposicaoHorario', () => {
     alterarStatusSessao(db, s.id, { status: 'cancelada_profissional' })
     const colisoes = sobreposicaoHorario(db, '2026-03-10T17:20:00.000Z', 50)
     expect(colisoes).toHaveLength(0)
+  })
+})
+
+describe('encerrarAgendaDoPaciente', () => {
+  it('encerra toda recorrência ativa do paciente e cancela (soft delete) as ocorrências futuras agendada', () => {
+    const rec = novaRecorrencia({ diaSemana: 2 })
+    materializarRecorrencia(db, rec, '2026-01-06')
+
+    encerrarAgendaDoPaciente(db, pacienteId, '2026-01-20')
+
+    const recorrenciaAtualizada = listarRecorrencias(db, pacienteId).find((r) => r.id === rec.id)
+    expect(recorrenciaAtualizada?.vigenciaFim).toBe('2026-01-20')
+
+    const restantes = listarSessoesPeriodo(db, '2026-01-01T00:00:00.000Z', '2027-01-01T00:00:00.000Z')
+    expect(restantes.every((s) => s.inicioUtc < '2026-01-20T00:00:00.000Z')).toBe(true)
+  })
+
+  it('cancela sessão avulsa (fora de recorrência) futura ainda agendada', () => {
+    criarSessaoAvulsa(db, { pacienteId, dataLocal: '2026-03-10', horaLocal: '14:00', duracaoMin: 50, modalidade: 'presencial' })
+
+    encerrarAgendaDoPaciente(db, pacienteId, '2026-02-01')
+
+    const sessoes = listarSessoesPeriodo(db, '2026-01-01T00:00:00.000Z', '2027-01-01T00:00:00.000Z')
+    expect(sessoes).toHaveLength(0)
+  })
+
+  it('nunca apaga sessão já realizada ou com falta', () => {
+    const s = criarSessaoAvulsa(db, { pacienteId, dataLocal: '2026-03-10', horaLocal: '14:00', duracaoMin: 50, modalidade: 'presencial' })
+    alterarStatusSessao(db, s.id, { status: 'realizada' })
+
+    encerrarAgendaDoPaciente(db, pacienteId, '2026-01-01')
+
+    const sessoes = listarSessoesPeriodo(db, '2026-01-01T00:00:00.000Z', '2027-01-01T00:00:00.000Z')
+    expect(sessoes.find((sessao) => sessao.id === s.id)?.status).toBe('realizada')
+  })
+
+  it('não afeta a agenda de outro paciente', () => {
+    const outroPacienteId = criarPaciente(db, { nome: 'Outro Paciente' }).id
+    const recOutro = criarRecorrencia(db, outroPacienteId, {
+      diaSemana: 3,
+      horaLocal: '14:00',
+      duracaoMin: 50,
+      modalidade: 'presencial',
+      vigenciaInicio: '2026-01-01'
+    })
+    materializarRecorrencia(db, recOutro, '2026-01-06')
+
+    encerrarAgendaDoPaciente(db, pacienteId, '2026-01-06')
+
+    const sessoesOutro = listarSessoesPeriodo(db, '2026-01-01T00:00:00.000Z', '2027-01-01T00:00:00.000Z').filter(
+      (s) => s.pacienteId === outroPacienteId
+    )
+    expect(sessoesOutro).toHaveLength(12)
   })
 })

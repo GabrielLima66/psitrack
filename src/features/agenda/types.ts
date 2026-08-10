@@ -33,6 +33,15 @@ export interface RecorrenciaInput {
   vigenciaInicio: string
 }
 
+export interface ConflitoRecorrencia {
+  recorrenciaId: string
+  pacienteId: string
+  pacienteNome: string
+  diaSemana: number
+  horaLocal: string
+  duracaoMin: number
+}
+
 export type StatusSessao = 'agendada' | 'realizada' | 'remarcada' | 'cancelada_profissional' | 'falta_sem_aviso' | 'falta_com_aviso'
 
 export interface Sessao {

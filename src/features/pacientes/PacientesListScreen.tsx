@@ -106,6 +106,8 @@ export function PacientesListScreen() {
             <p className="text-base font-semibold text-foreground">Não foi possível carregar a lista</p>
             <p className="text-[13px] leading-[1.55] text-muted-foreground">Nenhum dado foi alterado. Tente novamente; se persistir, feche e reabra o app.</p>
           </div>
+          {/* DIAGNÓSTICO TEMPORÁRIO — remover depois de identificar a causa do erro em produção. */}
+          <p className="max-w-md font-mono text-[11px] break-all text-muted-foreground/70">{store.listError}</p>
           <Button variant="outline" onClick={() => void store.carregarPacientes()}>
             Tentar de novo
           </Button>

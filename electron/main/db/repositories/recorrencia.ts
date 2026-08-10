@@ -1,7 +1,7 @@
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, eq, getTableColumns, isNull, ne } from 'drizzle-orm'
 import { z } from 'zod'
 import type { PsiTrackDatabase } from '../connection'
-import { recorrencia } from '../schema'
+import { pacientes, recorrencia } from '../schema'
 import { uuidv7 } from '../uuidv7'
 
 const MODALIDADE_VALUES = ['presencial', 'online'] as const
@@ -78,4 +78,64 @@ export function encerrarRecorrencia(db: PsiTrackDatabase, id: string, vigenciaFi
     .where(eq(recorrencia.id, id))
     .run()
   return obterRecorrenciaOuFalhar(db, id)
+}
+
+export interface ConflitoRecorrencia {
+  recorrenciaId: string
+  pacienteId: string
+  pacienteNome: string
+  diaSemana: number
+  horaLocal: string
+  duracaoMin: number
+}
+
+function horaParaMinutos(horaLocal: string): number {
+  const [hora, minuto] = horaLocal.split(':').map(Number)
+  return hora! * 60 + minuto!
+}
+
+/**
+ * Aviso, não bloqueio (mesmo critério de `sobreposicaoHorario` em sessao.ts):
+ * outra recorrência ativa, de OUTRO paciente, no mesmo dia da semana, com
+ * horário que se sobrepõe. Quem chama decide se avisa e deixa a usuária
+ * seguir mesmo assim. `excludingRecorrenciaId` é pra quando a checagem é de
+ * uma recorrência que já existe (não faz sentido conflitar com ela mesma).
+ * `pacienteId` é `null` durante o cadastro combinado (Etapa 11/D24): o
+ * paciente ainda não tem id, então não há recorrência própria pra excluir.
+ */
+export function conflitosRecorrencia(
+  db: PsiTrackDatabase,
+  pacienteId: string | null,
+  input: { diaSemana: number; horaLocal: string; duracaoMin: number; vigenciaInicio: string },
+  excludingRecorrenciaId?: string
+): ConflitoRecorrencia[] {
+  const condicoes = [eq(recorrencia.diaSemana, input.diaSemana), isNull(recorrencia.deletedAt)]
+  if (pacienteId) condicoes.push(ne(recorrencia.pacienteId, pacienteId))
+
+  const candidatas = db
+    .select({ ...getTableColumns(recorrencia), pacienteNome: pacientes.nome })
+    .from(recorrencia)
+    .innerJoin(pacientes, eq(recorrencia.pacienteId, pacientes.id))
+    .where(and(...condicoes))
+    .all()
+
+  const inicioMin = horaParaMinutos(input.horaLocal)
+  const fimMin = inicioMin + input.duracaoMin
+
+  return candidatas
+    .filter((r) => r.id !== excludingRecorrenciaId)
+    .filter((r) => !r.vigenciaFim || r.vigenciaFim > input.vigenciaInicio) // ainda ativa quando a nova começar
+    .filter((r) => {
+      const outroInicioMin = horaParaMinutos(r.horaLocal)
+      const outroFimMin = outroInicioMin + r.duracaoMin
+      return inicioMin < outroFimMin && outroInicioMin < fimMin
+    })
+    .map((r) => ({
+      recorrenciaId: r.id,
+      pacienteId: r.pacienteId,
+      pacienteNome: r.pacienteNome,
+      diaSemana: r.diaSemana,
+      horaLocal: r.horaLocal,
+      duracaoMin: r.duracaoMin
+    }))
 }

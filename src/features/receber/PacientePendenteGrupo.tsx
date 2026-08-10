@@ -6,6 +6,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { hojeLocal as hoje } from '../agenda/tempo'
 import { formatarCentavos, formatarCompetencia, formatarTipoLancamento } from '../pacientes/formatters'
 import { useReceberStore } from './store'
 import type { ContratoPreco, LancamentoComPaciente, MeioPagamento } from './types'
@@ -25,10 +26,6 @@ const MEIO_OPTIONS: { value: MeioPagamento; label: string }[] = [
   { value: 'cartao', label: 'Cartão' },
   { value: 'outro', label: 'Outro' }
 ]
-
-function hoje(): string {
-  return new Date().toISOString().slice(0, 10)
-}
 
 /**
  * `avulso`: seleção item a item. `mensal`: competência inteira já vem

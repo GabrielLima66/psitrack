@@ -1,5 +1,7 @@
 import { create } from 'zustand'
+import { hojeLocal } from '../agenda/tempo'
 import type {
+  ConflitoRecorrencia,
   ContratoPreco,
   ContratoPrecoInput,
   Lancamento,
@@ -29,12 +31,8 @@ import type {
 
 export type PacientesScreen = 'lista' | 'form'
 
-function hojeLocalIso(): string {
-  return new Date().toISOString().slice(0, 10)
-}
-
 function contratoRascunhoVazio(): ContratoPrecoInput {
-  return { modalidade: 'avulso', valorCentavos: 0, politicaFalta: 'cobra_sem_aviso', vigenciaInicio: hojeLocalIso() }
+  return { modalidade: 'avulso', valorCentavos: 0, politicaFalta: 'cobra_sem_aviso', vigenciaInicio: hojeLocal() }
 }
 
 interface PacientesStoreState {
@@ -110,6 +108,11 @@ interface PacientesStoreState {
 
   adicionarRecorrenciaExistente: (input: RecorrenciaInput) => Promise<void>
   encerrarRecorrenciaExistente: (id: string, vigenciaFim: string) => Promise<void>
+  /** Aviso, não bloqueio — chamado ANTES de adicionar um horário fixo (rascunho ou existente) pra avisar se outro paciente já ocupa aquele dia/hora. */
+  verificarConflitosRecorrencia: (
+    input: { diaSemana: number; horaLocal: string; duracaoMin: number; vigenciaInicio: string },
+    excludingRecorrenciaId?: string
+  ) => Promise<ConflitoRecorrencia[]>
 
   // Atalho "registrar evolução" clicado a partir da agenda (Etapa 11).
   prefillEvolucao: { sessaoId: string; dataSessao: string } | null
@@ -351,6 +354,10 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
     }
     const lista = await window.psitrack.evolucao.listar(input.pacienteId)
     if (lista.ok) set({ evolucoes: lista.evolucoes })
+    // Entrada tipo=sessao com sessaoId gera lançamento no backend
+    // (faturamento.ts) — sem isso a aba Financeiro, se já carregada, fica
+    // mostrando o estado de antes da cobrança até a ficha ser reaberta.
+    void get().carregarFinanceiro()
     return true
   },
 
@@ -368,6 +375,7 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
     }
     const lista = await window.psitrack.evolucao.listar(paciente.id)
     if (lista.ok) set({ evolucoes: lista.evolucoes })
+    void get().carregarFinanceiro()
     return true
   },
 
@@ -383,6 +391,7 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
     }
     const lista = await window.psitrack.evolucao.listar(input.pacienteId)
     if (lista.ok) set({ evolucoes: lista.evolucoes })
+    void get().carregarFinanceiro()
     return true
   },
 
@@ -516,6 +525,12 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
     }
   },
 
+  verificarConflitosRecorrencia: async (input, excludingRecorrenciaId) => {
+    const paciente = get().pacienteEmEdicao
+    const result = await window.psitrack.recorrencia.conflitos(paciente?.id ?? null, input, excludingRecorrenciaId)
+    return result.ok ? result.conflitos : []
+  },
+
   abrirParaRegistrarEvolucao: async (pacienteId, sessaoId, dataSessaoLocal) => {
     const result = await window.psitrack.paciente.obter(pacienteId)
     if (!result.ok || !result.paciente) return
@@ -529,7 +544,7 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
     const paciente = get().pacienteEmEdicao
     if (!paciente) return
     set({ financeiroBusy: true, financeiroError: null })
-    const hoje = new Date().toISOString().slice(0, 10)
+    const hoje = hojeLocal()
     const [vigente, historico, lancamentos, pagamentos] = await Promise.all([
       window.psitrack.contrato.vigente(paciente.id, hoje),
       window.psitrack.contrato.historico(paciente.id),

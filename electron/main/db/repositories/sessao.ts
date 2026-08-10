@@ -186,6 +186,42 @@ export function encerrarSerie(db: PsiTrackDatabase, recorrenciaId: string, dataF
   return atualizada
 }
 
+/**
+ * Paciente encerrado não deve continuar recebendo ocorrências futuras: encerra
+ * (mesma lógica de `encerrarSerie`, uma chamada por série) toda recorrência
+ * ainda ativa do paciente, e cancela — soft delete — qualquer sessão avulsa
+ * dele (fora de recorrência) que ainda esteja `agendada` no futuro. Sessão já
+ * `realizada`/com falta/etc nunca é tocada, mesmo critério de `encerrarSerie`.
+ */
+export function encerrarAgendaDoPaciente(db: PsiTrackDatabase, pacienteId: string, dataFim: string): void {
+  const recorrenciasDoPaciente = db
+    .select()
+    .from(recorrencia)
+    .where(and(eq(recorrencia.pacienteId, pacienteId), isNull(recorrencia.deletedAt)))
+    .all()
+
+  for (const rec of recorrenciasDoPaciente) {
+    if (!rec.vigenciaFim || rec.vigenciaFim > dataFim) {
+      encerrarSerie(db, rec.id, dataFim)
+    }
+  }
+
+  const corteUtc = localParaUtc(dataFim, '00:00')
+  const now = new Date().toISOString()
+  db.update(sessao)
+    .set({ deletedAt: now, updatedAt: now })
+    .where(
+      and(
+        eq(sessao.pacienteId, pacienteId),
+        isNull(sessao.recorrenciaId),
+        eq(sessao.status, 'agendada'),
+        gte(sessao.inicioUtc, corteUtc),
+        isNull(sessao.deletedAt)
+      )
+    )
+    .run()
+}
+
 /** Agenda inteira do consultório — não filtra por paciente (D-visão semanal/diária é do dia a dia, não da ficha). */
 export function listarSessoesPeriodo(db: PsiTrackDatabase, inicioUtc: string, fimUtc: string): SessaoComPaciente[] {
   return db

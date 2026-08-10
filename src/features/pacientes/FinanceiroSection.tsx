@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { ContratoPreco, ContratoPrecoInput, Lancamento, LancamentoAjusteInput, MarcarReciboEmitidoInput, Pagamento, PoliticaFalta } from '../agenda/types'
 import { ChevronDown } from 'lucide-react'
+import { hojeLocal as hoje } from '../agenda/tempo'
 import {
   formatarCentavos,
   formatarCompetencia,
@@ -35,10 +36,6 @@ const POLITICA_OPTIONS: { value: PoliticaFalta; label: string }[] = [
   { value: 'cobra_sem_aviso', label: 'Cobra só sem aviso prévio' },
   { value: 'nunca_cobra', label: 'Nunca cobra falta' }
 ]
-
-function hoje(): string {
-  return new Date().toISOString().slice(0, 10)
-}
 
 /** Aba Financeiro da ficha (Etapa 12): contrato vigente, histórico de vigências, reajuste e lançamentos por competência. */
 export function FinanceiroSection({

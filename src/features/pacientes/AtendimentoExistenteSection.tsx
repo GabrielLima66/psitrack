@@ -5,16 +5,20 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { formatarDataCurta, formatarDiaSemanaAbrev } from '../agenda/formatters'
-import type { ModalidadeAtendimento, Recorrencia, RecorrenciaInput } from '../agenda/types'
+import { hojeLocal as hoje } from '../agenda/tempo'
+import type { ConflitoRecorrencia, ModalidadeAtendimento, Recorrencia, RecorrenciaInput } from '../agenda/types'
+import { ConflitoRecorrenciaDialog } from './ConflitoRecorrenciaDialog'
 
 interface AtendimentoExistenteSectionProps {
   recorrencias: Recorrencia[]
   onAdicionar: (input: RecorrenciaInput) => Promise<void>
   onEncerrar: (id: string, vigenciaFim: string) => Promise<void>
-}
-
-function hoje(): string {
-  return new Date().toISOString().slice(0, 10)
+  onVerificarConflitos: (input: {
+    diaSemana: number
+    horaLocal: string
+    duracaoMin: number
+    vigenciaInicio: string
+  }) => Promise<ConflitoRecorrencia[]>
 }
 
 /**
@@ -23,7 +27,12 @@ function hoje(): string {
  * ainda `agendada` — a agenda cuida disso (encerrarSerie), esta tela só
  * dispara a ação.
  */
-export function AtendimentoExistenteSection({ recorrencias, onAdicionar, onEncerrar }: AtendimentoExistenteSectionProps) {
+export function AtendimentoExistenteSection({
+  recorrencias,
+  onAdicionar,
+  onEncerrar,
+  onVerificarConflitos
+}: AtendimentoExistenteSectionProps) {
   const [diaSemana, setDiaSemana] = useState(1)
   const [horaLocal, setHoraLocal] = useState('14:00')
   const [duracaoMin, setDuracaoMin] = useState(50)
@@ -31,15 +40,26 @@ export function AtendimentoExistenteSection({ recorrencias, onAdicionar, onEncer
   const [adicionando, setAdicionando] = useState(false)
   const [mostrandoForm, setMostrandoForm] = useState(false)
   const [encerradasAbertas, setEncerradasAbertas] = useState(false)
+  const [conflitos, setConflitos] = useState<ConflitoRecorrencia[]>([])
 
   const ativas = recorrencias.filter((r) => !r.vigenciaFim || r.vigenciaFim > hoje())
   const encerradas = recorrencias.filter((r) => r.vigenciaFim && r.vigenciaFim <= hoje())
 
-  async function handleAdicionar(): Promise<void> {
+  async function criarRecorrencia(): Promise<void> {
     setAdicionando(true)
     await onAdicionar({ diaSemana, horaLocal, duracaoMin, modalidade, vigenciaInicio: hoje() })
     setAdicionando(false)
     setMostrandoForm(false)
+    setConflitos([])
+  }
+
+  async function handleAdicionar(): Promise<void> {
+    const encontrados = await onVerificarConflitos({ diaSemana, horaLocal, duracaoMin, vigenciaInicio: hoje() })
+    if (encontrados.length > 0) {
+      setConflitos(encontrados)
+      return
+    }
+    await criarRecorrencia()
   }
 
   return (
@@ -150,6 +170,14 @@ export function AtendimentoExistenteSection({ recorrencias, onAdicionar, onEncer
           </div>
         )}
       </div>
+
+      {conflitos.length > 0 && (
+        <ConflitoRecorrenciaDialog
+          conflitos={conflitos}
+          onMudarHorario={() => setConflitos([])}
+          onCriarMesmoAssim={() => void criarRecorrencia()}
+        />
+      )}
     </div>
   )
 }

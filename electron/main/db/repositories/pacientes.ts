@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { cpfSchema } from '../cpf'
 import type { PsiTrackDatabase } from '../connection'
 import { pacientes, prontuarioEvolucao } from '../schema'
+import { encerrarAgendaDoPaciente } from './sessao'
+import { utcParaDataLocal } from '../timezone'
 import { uuidv7 } from '../uuidv7'
 
 /** Compartilhado por escrita (grava em `nomeBusca`) e consulta (normaliza o termo buscado). SQLite não ignora acento em LIKE. */
@@ -25,7 +27,7 @@ const ORIGEM_VALUES = ['indicacao', 'convenio', 'redes', 'outro'] as const
 const dataNascimentoSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Data de nascimento inválida.')
-  .refine((value) => value <= new Date().toISOString().slice(0, 10), 'Data de nascimento não pode ser no futuro.')
+  .refine((value) => value <= utcParaDataLocal(new Date().toISOString()), 'Data de nascimento não pode ser no futuro.')
 
 /**
  * Usado tanto pra criar quanto pra editar — o formulário sempre manda o
@@ -129,22 +131,38 @@ export function atualizarPaciente(db: PsiTrackDatabase, id: string, input: Pacie
   return obterPacienteOuFalhar(db, id)
 }
 
+/**
+ * Encerrar o paciente fecha a agenda dele junto (D-mesmo raciocínio de
+ * `encerrarSerie`): sem isso a agenda continuaria gerando ocorrências
+ * futuras pra alguém que não está mais em atendimento. As duas escritas
+ * (status do paciente + fechamento da agenda) são uma transação só —
+ * nunca um paciente "encerrado" com agenda futura ainda aberta, nem
+ * vice-versa se algo falhar no meio.
+ */
 export function alterarStatusPaciente(db: PsiTrackDatabase, id: string, input: AlterarStatusInput): Paciente {
   obterPacienteOuFalhar(db, id)
   const parsed = alterarStatusSchema.parse(input)
   const now = new Date().toISOString()
 
-  db.update(pacientes)
-    .set({
-      status: parsed.status,
-      motivoEncerramento: parsed.status === 'encerrado' ? (parsed.motivoEncerramento ?? null) : null,
-      statusAlteradoEm: now,
-      updatedAt: now
-    })
-    .where(eq(pacientes.id, id))
-    .run()
+  const executar = db.$client.transaction((): Paciente => {
+    db.update(pacientes)
+      .set({
+        status: parsed.status,
+        motivoEncerramento: parsed.status === 'encerrado' ? (parsed.motivoEncerramento ?? null) : null,
+        statusAlteradoEm: now,
+        updatedAt: now
+      })
+      .where(eq(pacientes.id, id))
+      .run()
 
-  return obterPacienteOuFalhar(db, id)
+    if (parsed.status === 'encerrado') {
+      encerrarAgendaDoPaciente(db, id, utcParaDataLocal(now))
+    }
+
+    return obterPacienteOuFalhar(db, id)
+  })
+
+  return executar()
 }
 
 /** Soft delete — nenhuma linha é removida do banco (CLAUDE.md invariante de dado #5). */

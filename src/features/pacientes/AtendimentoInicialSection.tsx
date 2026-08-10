@@ -4,7 +4,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { formatarDiaSemanaAbrev } from '../agenda/formatters'
-import type { ContratoPrecoInput, ModalidadeAtendimento, PoliticaFalta, RecorrenciaInput } from '../agenda/types'
+import { hojeLocal } from '../agenda/tempo'
+import type { ConflitoRecorrencia, ContratoPrecoInput, ModalidadeAtendimento, PoliticaFalta, RecorrenciaInput } from '../agenda/types'
+import { ConflitoRecorrenciaDialog } from './ConflitoRecorrenciaDialog'
 
 interface AtendimentoInicialSectionProps {
   recorrencias: RecorrenciaInput[]
@@ -12,6 +14,12 @@ interface AtendimentoInicialSectionProps {
   onRemover: (index: number) => void
   contrato: ContratoPrecoInput
   onContratoChange: (contrato: ContratoPrecoInput) => void
+  onVerificarConflitos: (input: {
+    diaSemana: number
+    horaLocal: string
+    duracaoMin: number
+    vigenciaInicio: string
+  }) => Promise<ConflitoRecorrencia[]>
 }
 
 const POLITICA_OPTIONS: { value: PoliticaFalta; label: string }[] = [
@@ -30,16 +38,28 @@ export function AtendimentoInicialSection({
   onAdicionar,
   onRemover,
   contrato,
-  onContratoChange
+  onContratoChange,
+  onVerificarConflitos
 }: AtendimentoInicialSectionProps) {
   const [diaSemana, setDiaSemana] = useState(1)
   const [horaLocal, setHoraLocal] = useState('14:00')
   const [duracaoMin, setDuracaoMin] = useState(50)
   const [modalidade, setModalidade] = useState<ModalidadeAtendimento>('presencial')
+  const [conflitos, setConflitos] = useState<ConflitoRecorrencia[]>([])
 
-  function handleAdicionar(): void {
+  function adicionarRascunho(): void {
     // vigenciaInicio = hoje: a série começa no dia do cadastro, não é campo editável aqui.
-    onAdicionar({ diaSemana, horaLocal, duracaoMin, modalidade, vigenciaInicio: new Date().toISOString().slice(0, 10) })
+    onAdicionar({ diaSemana, horaLocal, duracaoMin, modalidade, vigenciaInicio: hojeLocal() })
+    setConflitos([])
+  }
+
+  async function handleAdicionar(): Promise<void> {
+    const encontrados = await onVerificarConflitos({ diaSemana, horaLocal, duracaoMin, vigenciaInicio: hojeLocal() })
+    if (encontrados.length > 0) {
+      setConflitos(encontrados)
+      return
+    }
+    adicionarRascunho()
   }
 
   const valorReais = contrato.valorCentavos > 0 ? (contrato.valorCentavos / 100).toFixed(2) : ''
@@ -108,7 +128,7 @@ export function AtendimentoInicialSection({
               </SelectContent>
             </Select>
           </div>
-          <Button type="button" variant="outline" onClick={handleAdicionar}>
+          <Button type="button" variant="outline" onClick={() => void handleAdicionar()}>
             Adicionar horário
           </Button>
         </div>
@@ -163,6 +183,14 @@ export function AtendimentoInicialSection({
         </div>
       </div>
       </div>
+
+      {conflitos.length > 0 && (
+        <ConflitoRecorrenciaDialog
+          conflitos={conflitos}
+          onMudarHorario={() => setConflitos([])}
+          onCriarMesmoAssim={adicionarRascunho}
+        />
+      )}
     </div>
   )
 }

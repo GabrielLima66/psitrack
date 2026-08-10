@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron'
 import { criarPacienteComAtendimento, type CriarPacienteComAtendimentoInput } from '../db/repositories/cadastroAtendimento'
 import { alterarStatusSessaoComCobranca, remarcarSessaoComCobranca } from '../db/repositories/faturamento'
-import { criarRecorrencia, listarRecorrencias, type RecorrenciaInput } from '../db/repositories/recorrencia'
+import { conflitosRecorrencia, criarRecorrencia, listarRecorrencias, type RecorrenciaInput } from '../db/repositories/recorrencia'
 import {
   criarSessaoAvulsa,
   encerrarSerie,
@@ -37,6 +37,19 @@ export function registerAgendaHandlers(): void {
 
   ipcMain.handle('recorrencia:encerrar', (_event, id: string, vigenciaFim: string) =>
     safely(() => ({ recorrencia: encerrarSerie(getDb(), id, vigenciaFim) }))
+  )
+
+  // Aviso, não bloqueio (mesmo critério de sessao:sobreposicao) — chamado
+  // ANTES de recorrencia:criar pra decidir se avisa a usuária; a criação em
+  // si não recusa nada mesmo com conflito.
+  ipcMain.handle(
+    'recorrencia:conflitos',
+    (
+      _event,
+      pacienteId: string | null,
+      input: { diaSemana: number; horaLocal: string; duracaoMin: number; vigenciaInicio: string },
+      excludingRecorrenciaId?: string
+    ) => safely(() => ({ conflitos: conflitosRecorrencia(getDb(), pacienteId, input, excludingRecorrenciaId) }))
   )
 
   ipcMain.handle('sessao:listarPeriodo', (_event, inicioUtc: string, fimUtc: string) =>

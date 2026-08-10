@@ -6,7 +6,7 @@ import { openDatabase, type PsiTrackDatabase } from '../connection'
 import { runMigrations } from '../migrate'
 import { createTempDbPath } from '../test-support'
 import { criarPaciente } from './pacientes'
-import { criarRecorrencia, encerrarRecorrencia, listarRecorrencias } from './recorrencia'
+import { conflitosRecorrencia, criarRecorrencia, encerrarRecorrencia, listarRecorrencias } from './recorrencia'
 
 const MIGRATIONS_FOLDER = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'migrations')
 
@@ -108,5 +108,99 @@ describe('encerrarRecorrencia', () => {
     const lista = listarRecorrencias(db, pacienteId)
     const outraSerie = lista.find((r) => r.diaSemana === 4)
     expect(outraSerie?.vigenciaFim).toBeNull()
+  })
+})
+
+describe('conflitosRecorrencia', () => {
+  it('detecta outro paciente com recorrência ativa no mesmo dia e horário que se sobrepõe', () => {
+    const outroId = criarPaciente(db, { nome: 'Outro Paciente' }).id
+    criarRecorrencia(db, outroId, { diaSemana: 2, horaLocal: '14:00', duracaoMin: 50, modalidade: 'presencial', vigenciaInicio: '2026-01-01' })
+
+    const conflitos = conflitosRecorrencia(db, pacienteId, {
+      diaSemana: 2,
+      horaLocal: '14:20',
+      duracaoMin: 50,
+      vigenciaInicio: '2026-01-01'
+    })
+
+    expect(conflitos).toHaveLength(1)
+    expect(conflitos[0]?.pacienteId).toBe(outroId)
+    expect(conflitos[0]?.pacienteNome).toBe('Outro Paciente')
+  })
+
+  it('não conflita com a própria recorrência do mesmo paciente', () => {
+    criarRecorrencia(db, pacienteId, { diaSemana: 2, horaLocal: '14:00', duracaoMin: 50, modalidade: 'presencial', vigenciaInicio: '2026-01-01' })
+
+    const conflitos = conflitosRecorrencia(db, pacienteId, {
+      diaSemana: 2,
+      horaLocal: '14:00',
+      duracaoMin: 50,
+      vigenciaInicio: '2026-01-01'
+    })
+
+    expect(conflitos).toHaveLength(0)
+  })
+
+  it('sem conflito em dia da semana diferente', () => {
+    const outroId = criarPaciente(db, { nome: 'Outro Paciente' }).id
+    criarRecorrencia(db, outroId, { diaSemana: 3, horaLocal: '14:00', duracaoMin: 50, modalidade: 'presencial', vigenciaInicio: '2026-01-01' })
+
+    const conflitos = conflitosRecorrencia(db, pacienteId, {
+      diaSemana: 2,
+      horaLocal: '14:00',
+      duracaoMin: 50,
+      vigenciaInicio: '2026-01-01'
+    })
+
+    expect(conflitos).toHaveLength(0)
+  })
+
+  it('sem conflito quando os horários não se tocam', () => {
+    const outroId = criarPaciente(db, { nome: 'Outro Paciente' }).id
+    criarRecorrencia(db, outroId, { diaSemana: 2, horaLocal: '14:00', duracaoMin: 50, modalidade: 'presencial', vigenciaInicio: '2026-01-01' })
+
+    const conflitos = conflitosRecorrencia(db, pacienteId, {
+      diaSemana: 2,
+      horaLocal: '15:00',
+      duracaoMin: 50,
+      vigenciaInicio: '2026-01-01'
+    })
+
+    expect(conflitos).toHaveLength(0)
+  })
+
+  it('sem conflito quando a recorrência do outro paciente já foi encerrada antes da nova começar', () => {
+    const outroId = criarPaciente(db, { nome: 'Outro Paciente' }).id
+    const recOutro = criarRecorrencia(db, outroId, {
+      diaSemana: 2,
+      horaLocal: '14:00',
+      duracaoMin: 50,
+      modalidade: 'presencial',
+      vigenciaInicio: '2026-01-01'
+    })
+    encerrarRecorrencia(db, recOutro.id, '2026-03-01')
+
+    const conflitos = conflitosRecorrencia(db, pacienteId, {
+      diaSemana: 2,
+      horaLocal: '14:00',
+      duracaoMin: 50,
+      vigenciaInicio: '2026-06-01'
+    })
+
+    expect(conflitos).toHaveLength(0)
+  })
+
+  it('paciente novo (pacienteId null) ainda detecta conflito contra pacientes existentes', () => {
+    const outroId = criarPaciente(db, { nome: 'Outro Paciente' }).id
+    criarRecorrencia(db, outroId, { diaSemana: 5, horaLocal: '09:00', duracaoMin: 50, modalidade: 'presencial', vigenciaInicio: '2026-01-01' })
+
+    const conflitos = conflitosRecorrencia(db, null, {
+      diaSemana: 5,
+      horaLocal: '09:00',
+      duracaoMin: 50,
+      vigenciaInicio: '2026-01-01'
+    })
+
+    expect(conflitos).toHaveLength(1)
   })
 })

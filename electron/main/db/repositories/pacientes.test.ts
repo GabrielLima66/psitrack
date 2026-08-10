@@ -17,6 +17,9 @@ import {
   obterPaciente,
   restaurarPaciente
 } from './pacientes'
+import { utcParaDataLocal } from '../timezone'
+import { criarRecorrencia, listarRecorrencias } from './recorrencia'
+import { criarSessaoAvulsa, listarSessoesPeriodo, materializarRecorrencia } from './sessao'
 
 const MIGRATIONS_FOLDER = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'migrations')
 const CPF_VALIDO_1 = '11144477735'
@@ -101,6 +104,43 @@ describe('alterarStatusPaciente', () => {
     expect(atualizado.status).toBe('encerrado')
     expect(atualizado.motivoEncerramento).toBe('alta')
     expect(atualizado.statusAlteradoEm).not.toBeNull()
+  })
+
+  it('encerrar fecha a agenda do paciente: recorrência ativa é encerrada e sessões futuras agendada somem', () => {
+    const hoje = utcParaDataLocal(new Date().toISOString())
+    const paciente = criarPaciente(db, { nome: 'Teste' })
+    const rec = criarRecorrencia(db, paciente.id, {
+      diaSemana: 2,
+      horaLocal: '14:00',
+      duracaoMin: 50,
+      modalidade: 'presencial',
+      vigenciaInicio: hoje
+    })
+    materializarRecorrencia(db, rec, hoje)
+    criarSessaoAvulsa(db, { pacienteId: paciente.id, dataLocal: '2099-03-10', horaLocal: '14:00', duracaoMin: 50, modalidade: 'presencial' })
+
+    alterarStatusPaciente(db, paciente.id, { status: 'encerrado', motivoEncerramento: 'alta' })
+
+    expect(listarRecorrencias(db, paciente.id)[0]?.vigenciaFim).not.toBeNull()
+    expect(listarSessoesPeriodo(db, '2000-01-01T00:00:00.000Z', '2100-01-01T00:00:00.000Z')).toHaveLength(0)
+  })
+
+  it('pausar (não encerrar) não mexe na agenda', () => {
+    const hoje = utcParaDataLocal(new Date().toISOString())
+    const paciente = criarPaciente(db, { nome: 'Teste' })
+    const rec = criarRecorrencia(db, paciente.id, {
+      diaSemana: 2,
+      horaLocal: '14:00',
+      duracaoMin: 50,
+      modalidade: 'presencial',
+      vigenciaInicio: hoje
+    })
+    materializarRecorrencia(db, rec, hoje)
+
+    alterarStatusPaciente(db, paciente.id, { status: 'pausado' })
+
+    expect(listarRecorrencias(db, paciente.id)[0]?.vigenciaFim).toBeNull()
+    expect(listarSessoesPeriodo(db, '2000-01-01T00:00:00.000Z', '2100-01-01T00:00:00.000Z')).toHaveLength(12)
   })
 })
 

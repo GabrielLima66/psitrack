@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { hojeLocal } from '../agenda/tempo'
 import { formatarDataBr, formatarDataHoraBr, formatarMesAnoAbrevDeData, formatarTipoEvolucao } from './formatters'
 import type { CriarEvolucaoComSessaoRetroativaInput, CriarEvolucaoInput, Evolucao, RetificarEvolucaoInput, TipoEvolucao } from './types'
 
@@ -23,10 +24,6 @@ interface EvolucaoSectionProps {
 
 type Modo = 'fechado' | 'nova' | { retificando: string }
 
-function hoje(): string {
-  return new Date().toISOString().slice(0, 10)
-}
-
 /**
  * Timeline append-only de verdade: não existe editar nem excluir aqui — só
  * "nova entrada" e "retificar" (que também é só uma entrada nova). A
@@ -45,7 +42,7 @@ export function EvolucaoSection({
 }: EvolucaoSectionProps) {
   const [modo, setModo] = useState<Modo>('fechado')
   const [conteudo, setConteudo] = useState('')
-  const [dataSessao, setDataSessao] = useState(hoje())
+  const [dataSessao, setDataSessao] = useState(hojeLocal())
   const [tipo, setTipo] = useState<TipoEvolucao>('sessao')
   const [motivoRetificacao, setMotivoRetificacao] = useState('')
   const [sessaoIdAtual, setSessaoIdAtual] = useState<string | null>(null)
@@ -79,7 +76,7 @@ export function EvolucaoSection({
 
   function abrirNovaEntrada(): void {
     setConteudo('')
-    setDataSessao(hoje())
+    setDataSessao(hojeLocal())
     setTipo('sessao')
     setSessaoIdAtual(null)
     setOferecendoSessaoRetroativa(false)
