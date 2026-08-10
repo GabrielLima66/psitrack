@@ -1,6 +1,6 @@
 {
   "name": "psitrack",
-  "version": "0.0.1",
+  "version": "0.0.4",
   "description": "PsiTrack Desktop — gestão de consultório para psicóloga autônoma. 100% local.",
   "private": true,
   "author": "PsiTrack",
@@ -8,8 +8,9 @@
   "scripts": {
     "postinstall": "electron-builder install-app-deps",
     "dev": "electron-vite dev",
-    "build": "electron-vite build && electron-builder",
+    "build": "electron-vite build && electron-builder -p never",
     "build:unpack": "electron-vite build && electron-builder --dir",
+    "release": "electron-vite build && electron-builder -p always",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "node scripts/test.mjs",
     "db:generate": "drizzle-kit generate"
@@ -22,6 +23,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.2",
+    "electron-updater": "^6.8.9",
     "lucide-react": "^1.28.0",
     "radix-ui": "^1.6.7",
     "react": "^19.2.0",

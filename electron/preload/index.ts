@@ -157,6 +157,15 @@ export interface Recorrencia {
   deletedAt: string | null
 }
 
+export interface ConflitoRecorrencia {
+  recorrenciaId: string
+  pacienteId: string
+  pacienteNome: string
+  diaSemana: number
+  horaLocal: string
+  duracaoMin: number
+}
+
 export interface RecorrenciaInput {
   diaSemana: number
   horaLocal: string
@@ -456,11 +465,30 @@ export interface ExecucaoBackupAutomatico {
   erro?: string
 }
 
+export interface StatusAtualizacao {
+  versaoAtual: string
+  atualizacaoDisponivel: boolean
+  versaoDisponivel: string | null
+}
+
 const api = {
   app: {
     getVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion'),
-    /** Abre a página de releases no navegador do sistema — só dispara com clique explícito, nunca automático (invariante de segurança #7 do CLAUDE.md). */
-    verificarAtualizacoes: (): Promise<void> => ipcRenderer.invoke('app:verificarAtualizacoes')
+    /** Só verifica quando chamado — nunca em background, nunca por intervalo (invariante de segurança #7). */
+    verificarAtualizacao: (): Promise<IpcResult<StatusAtualizacao>> => ipcRenderer.invoke('app:verificarAtualizacao'),
+    /**
+     * Faz backup de segurança, baixa e instala — o app fecha e reabre
+     * sozinho na versão nova. Mesmo padrão de `backup:restaurar`: a promise
+     * normalmente nunca chega a resolver do lado do renderer, o processo
+     * morre antes da resposta IPC voltar.
+     */
+    baixarEInstalarAtualizacao: (): Promise<IpcResult> => ipcRenderer.invoke('app:baixarEInstalarAtualizacao'),
+    /** Progresso (0-100) do download da atualização em andamento. */
+    onProgressoAtualizacao: (callback: (percentual: number) => void): (() => void) => {
+      const listener = (_event: IpcRendererEvent, percentual: number): void => callback(percentual)
+      ipcRenderer.on('app:progressoAtualizacao', listener)
+      return () => ipcRenderer.removeListener('app:progressoAtualizacao', listener)
+    }
   },
   vault: {
     status: (): Promise<{ exists: boolean }> => ipcRenderer.invoke('vault:status'),
@@ -529,7 +557,13 @@ const api = {
     criar: (pacienteId: string, input: RecorrenciaInput): Promise<IpcResult<{ recorrencia: Recorrencia }>> =>
       ipcRenderer.invoke('recorrencia:criar', pacienteId, input),
     encerrar: (id: string, vigenciaFim: string): Promise<IpcResult<{ recorrencia: Recorrencia }>> =>
-      ipcRenderer.invoke('recorrencia:encerrar', id, vigenciaFim)
+      ipcRenderer.invoke('recorrencia:encerrar', id, vigenciaFim),
+    conflitos: (
+      pacienteId: string | null,
+      input: { diaSemana: number; horaLocal: string; duracaoMin: number; vigenciaInicio: string },
+      excludingRecorrenciaId?: string
+    ): Promise<IpcResult<{ conflitos: ConflitoRecorrencia[] }>> =>
+      ipcRenderer.invoke('recorrencia:conflitos', pacienteId, input, excludingRecorrenciaId)
   },
   sessao: {
     listarPeriodo: (inicioUtc: string, fimUtc: string): Promise<IpcResult<{ sessoes: SessaoComPaciente[] }>> =>

@@ -56,6 +56,13 @@ export function ConfiguracoesScreen() {
       purgaError: s.purgaError,
       ultimaPurga: s.ultimaPurga,
       historico: s.historico,
+      atualizacaoStatus: s.atualizacaoStatus,
+      atualizacaoVersaoDisponivel: s.atualizacaoVersaoDisponivel,
+      atualizacaoProgresso: s.atualizacaoProgresso,
+      atualizacaoError: s.atualizacaoError,
+      verificarAtualizacao: s.verificarAtualizacao,
+      baixarEInstalarAtualizacao: s.baixarEInstalarAtualizacao,
+      registrarProgressoAtualizacao: s.registrarProgressoAtualizacao,
       carregar: s.carregar,
       criarBackup: s.criarBackup,
       verificar: s.verificar,
@@ -73,6 +80,23 @@ export function ConfiguracoesScreen() {
     void store.carregar()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    return window.psitrack.app.onProgressoAtualizacao((percentual) => store.registrarProgressoAtualizacao(percentual))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const atualizacaoEmAndamento = store.atualizacaoStatus === 'verificando' || store.atualizacaoStatus === 'baixando'
+  const atualizacaoRotulo =
+    store.atualizacaoStatus === 'verificando'
+      ? 'Buscando…'
+      : store.atualizacaoStatus === 'baixando'
+        ? `Baixando… ${store.atualizacaoProgresso}%`
+        : store.atualizacaoStatus === 'disponivel'
+          ? `Baixar e instalar ${store.atualizacaoVersaoDisponivel}`
+          : store.atualizacaoStatus === 'erro'
+            ? 'Tentar de novo'
+            : 'Buscar atualização'
 
   const ocupadoBytes = store.previewPurga
     ? store.previewPurga.local.totalBytes +
@@ -258,15 +282,24 @@ export function ConfiguracoesScreen() {
                 </div>
                 <Button
                   type="button"
-                  variant="outline"
+                  variant={store.atualizacaoStatus === 'disponivel' ? 'default' : 'outline'}
                   className="h-[34px] shrink-0"
-                  onClick={() => void window.psitrack.app.verificarAtualizacoes()}
+                  disabled={atualizacaoEmAndamento}
+                  onClick={() =>
+                    void (store.atualizacaoStatus === 'disponivel'
+                      ? store.baixarEInstalarAtualizacao()
+                      : store.verificarAtualizacao())
+                  }
                 >
-                  Verificar atualizações
+                  {atualizacaoRotulo}
                 </Button>
               </div>
-              <p className="-mt-2 text-[12px] text-muted-foreground">
-                Abre a página de versões no seu navegador — verificação manual, nunca automática. Requer internet só no momento do clique.
+              <p className={cn('-mt-2 text-[12px]', store.atualizacaoStatus === 'erro' ? 'text-destructive' : 'text-muted-foreground')}>
+                {store.atualizacaoStatus === 'erro' && store.atualizacaoError
+                  ? store.atualizacaoError
+                  : store.atualizacaoStatus === 'disponivel'
+                    ? 'Instalar faz backup de segurança automaticamente, baixa e reinicia o app sozinho.'
+                    : 'Verificação manual, nunca automática — só roda quando você clica. Requer internet só nesse momento.'}
               </p>
 
               <div className="flex items-center justify-between gap-4 rounded-[0.625rem] border border-border bg-card p-[16px_18px]">

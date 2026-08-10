@@ -36,5 +36,12 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-# Sem publish configurado de propósito: o app não tem auto-update (invariante
-# "sem rede" do CLAUDE.md). Não adicionar bloco `publish`.
+# Feed de update (electron-updater lê os releases publicados aqui). Isto NÃO
+# ativa auto-update: `npm run build` (uso normal, local) roda com `-p never`
+# — só `npm run release` publica de verdade, e o app só verifica/baixa
+# quando a usuária clica no botão (invariante "sem rede" do CLAUDE.md:
+# nenhuma chamada acontece sem ação explícita).
+publish:
+  provider: github
+  owner: GabrielLima66
+  repo: psitrack

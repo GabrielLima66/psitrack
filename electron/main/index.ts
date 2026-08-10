@@ -1,7 +1,7 @@
 import { app, BrowserWindow, powerMonitor, shell } from 'electron'
 import { join } from 'node:path'
 import { dispararBackupAutomaticoSeNecessario, backupAutomaticoEmAndamento } from './backup/scheduler'
-import { foiPularFechamentoSolicitado, resetarPularFechamento } from './fechamento'
+import { foiPularFechamentoSolicitado, resetarPularFechamento, saidaParaAtualizacaoFoiPermitida } from './fechamento'
 import { registerAgendaHandlers } from './ipc/agenda'
 import { registerAnexosHandlers } from './ipc/anexos'
 import { registerAnotacoesHandlers } from './ipc/anotacoes'
@@ -14,6 +14,7 @@ import { getDb, registerVaultHandlers } from './ipc/vault'
 import { KeySession } from './crypto/session'
 import { startAutoLock } from './crypto/idle-lock'
 import { getAnexosDir, getBackupsDir, getConfigPath, getKeysFilePath } from './paths'
+import { registerUpdateHandlers } from './update'
 
 const session = new KeySession()
 
@@ -70,6 +71,7 @@ app.whenReady().then(() => {
   registerFinanceiroHandlers()
   registerAnexosHandlers(session)
   registerBackupHandlers(session)
+  registerUpdateHandlers(session)
   createWindow()
 
   // Poll de ociosidade do SO inteiro (CLAUDE.md invariante #6: 5 min sem
@@ -112,6 +114,7 @@ let podeSairMesmo = false
  */
 app.on('before-quit', (event) => {
   if (podeSairMesmo) return
+  if (saidaParaAtualizacaoFoiPermitida()) return // update.ts já fez o próprio backup — deixa o quitAndInstall() seguir puro
   if (!session.isUnlocked) return // cofre já travado, nada pra fazer, deixa fechar normal
 
   event.preventDefault()

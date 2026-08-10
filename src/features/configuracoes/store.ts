@@ -47,6 +47,16 @@ interface ConfiguracoesStoreState {
   avisoBackupAutomatico: ExecucaoBackupAutomatico | null
   fechandoComBackup: boolean
 
+  // Atualização manual: nunca verifica/baixa sozinho, só a partir de clique
+  // (invariante "sem rede" do CLAUDE.md) — ver electron/main/update.ts.
+  atualizacaoStatus: 'ocioso' | 'verificando' | 'disponivel' | 'baixando' | 'erro'
+  atualizacaoVersaoDisponivel: string | null
+  atualizacaoProgresso: number
+  atualizacaoError: string | null
+  verificarAtualizacao: () => Promise<void>
+  baixarEInstalarAtualizacao: () => Promise<void>
+  registrarProgressoAtualizacao: (percentual: number) => void
+
   carregar: () => Promise<void>
   criarBackup: () => Promise<void>
   verificar: (pasta: string) => Promise<void>
@@ -91,6 +101,11 @@ export const useConfiguracoesStore = create<ConfiguracoesStoreState>((set, get) 
   historico: [],
   avisoBackupAutomatico: null,
   fechandoComBackup: false,
+
+  atualizacaoStatus: 'ocioso',
+  atualizacaoVersaoDisponivel: null,
+  atualizacaoProgresso: 0,
+  atualizacaoError: null,
 
   carregar: async () => {
     set({ loading: true, error: null })
@@ -210,5 +225,31 @@ export const useConfiguracoesStore = create<ConfiguracoesStoreState>((set, get) 
   pularFechamento: async () => {
     set({ fechandoComBackup: false })
     await window.psitrack.backup.pularFechamento()
-  }
+  },
+
+  verificarAtualizacao: async () => {
+    set({ atualizacaoStatus: 'verificando', atualizacaoError: null })
+    const result = await window.psitrack.app.verificarAtualizacao()
+    if (!result.ok) {
+      set({ atualizacaoStatus: 'erro', atualizacaoError: result.error })
+      return
+    }
+    set({
+      atualizacaoStatus: result.atualizacaoDisponivel ? 'disponivel' : 'ocioso',
+      atualizacaoVersaoDisponivel: result.versaoDisponivel
+    })
+  },
+
+  // Dispara e não espera: faz backup, baixa e chama quitAndInstall() no
+  // main — o app fecha e reabre sozinho já na versão nova, mesmo padrão de
+  // `restaurar` (a promise normalmente nunca chega a resolver aqui).
+  baixarEInstalarAtualizacao: async () => {
+    set({ atualizacaoStatus: 'baixando', atualizacaoProgresso: 0, atualizacaoError: null })
+    const result = await window.psitrack.app.baixarEInstalarAtualizacao()
+    if (!result.ok) {
+      set({ atualizacaoStatus: 'erro', atualizacaoError: result.error })
+    }
+  },
+
+  registrarProgressoAtualizacao: (percentual) => set({ atualizacaoProgresso: percentual })
 }))
