@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { openDatabase, type PsiTrackDatabase } from '../connection'
 import { runMigrations } from '../migrate'
 import { createTempDbPath } from '../test-support'
-import { cancelarLancamento, criarLancamentoAjuste, listarLancamentosPaciente } from './lancamento'
+import { cancelarLancamento, criarLancamentoAjuste, listarLancamentosPaciente, reabrirLancamento } from './lancamento'
 import { criarPaciente } from './pacientes'
 
 const MIGRATIONS_FOLDER = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'migrations')
@@ -67,5 +67,20 @@ describe('cancelarLancamento', () => {
     const l = criarLancamentoAjuste(db, pacienteId, { tipo: 'ajuste', valorCentavos: 1000, descricao: 'x', competencia: '2026-03' })
     db.$client.prepare("UPDATE lancamento SET status = 'pago' WHERE id = ?").run(l.id)
     expect(() => cancelarLancamento(db, l.id)).toThrow()
+  })
+})
+
+describe('reabrirLancamento', () => {
+  it('reabre lançamento cancelado de volta pra pendente', () => {
+    const l = criarLancamentoAjuste(db, pacienteId, { tipo: 'ajuste', valorCentavos: 1000, descricao: 'x', competencia: '2026-03' })
+    cancelarLancamento(db, l.id)
+
+    const reaberto = reabrirLancamento(db, l.id)
+    expect(reaberto.status).toBe('pendente')
+  })
+
+  it('bloqueia reabrir um lançamento que não está cancelado', () => {
+    const l = criarLancamentoAjuste(db, pacienteId, { tipo: 'ajuste', valorCentavos: 1000, descricao: 'x', competencia: '2026-03' })
+    expect(() => reabrirLancamento(db, l.id)).toThrow()
   })
 })

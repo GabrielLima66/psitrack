@@ -112,3 +112,21 @@ export function cancelarLancamento(db: PsiTrackDatabase, id: string): Lancamento
     .run()
   return obterLancamentoOuFalhar(db, id)
 }
+
+/**
+ * Desfaz um cancelamento — simétrico a `cancelarLancamento`, sem `motivo`
+ * pelo mesmo motivo dele: um lançamento `cancelado` nunca foi pago de
+ * verdade (`cancelarLancamento` bloqueia cancelar um `pago`), então não há
+ * efeito externo pra reverter, só o estado interno.
+ */
+export function reabrirLancamento(db: PsiTrackDatabase, id: string): Lancamento {
+  const atual = obterLancamentoOuFalhar(db, id)
+  if (atual.status !== 'cancelado') {
+    throw new Error('Só é possível reabrir um lançamento cancelado.')
+  }
+  db.update(lancamento)
+    .set({ status: 'pendente', updatedAt: new Date().toISOString() })
+    .where(eq(lancamento.id, id))
+    .run()
+  return obterLancamentoOuFalhar(db, id)
+}

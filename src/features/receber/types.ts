@@ -39,6 +39,8 @@ export interface Pagamento {
   pagadorCpf: string | null
   reciboEmitidoEm: string | null
   reciboReferencia: string | null
+  estornadoEm: string | null
+  motivoEstorno: string | null
   createdAt: string
   updatedAt: string
   deletedAt: string | null

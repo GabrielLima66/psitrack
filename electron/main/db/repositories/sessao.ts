@@ -1,8 +1,8 @@
-import { and, asc, eq, gte, isNull, lt } from 'drizzle-orm'
+import { and, asc, eq, gte, inArray, isNull, lt } from 'drizzle-orm'
 import { z } from 'zod'
 import type { PsiTrackDatabase } from '../connection'
 import { calcularOcorrencias } from '../materializacao'
-import { pacientes, recorrencia, sessao } from '../schema'
+import { pacienteResponsavel, pacientes, recorrencia, sessao } from '../schema'
 import { localParaUtc, utcParaDataLocal } from '../timezone'
 import { uuidv7 } from '../uuidv7'
 import { dataSchema, encerrarRecorrencia, type Recorrencia } from './recorrencia'
@@ -235,6 +235,7 @@ export function listarSessoesPeriodo(db: PsiTrackDatabase, inicioUtc: string, fi
       status: sessao.status,
       statusAlteradoEm: sessao.statusAlteradoEm,
       avisadaEm: sessao.avisadaEm,
+      lembreteEnviadoEm: sessao.lembreteEnviadoEm,
       motivo: sessao.motivo,
       remarcadaParaId: sessao.remarcadaParaId,
       observacao: sessao.observacao,
@@ -320,4 +321,87 @@ export function sobreposicaoHorario(
     const outroFim = new Date(new Date(s.inicioUtc).getTime() + s.duracaoMin * 60_000).toISOString()
     return s.inicioUtc < fimUtc && outroFim > inicioUtc
   })
+}
+
+export type SessaoConfirmacao = Sessao & {
+  pacienteNome: string
+  pacienteNomeSocial: string | null
+  /** Telefone do responsável principal, se houver; senão o telefone do próprio paciente. Ver mensagens/whatsapp.ts. */
+  telefoneContato: string | null
+}
+
+/**
+ * Base do painel diário de confirmação (mensagens/PainelConfirmacoesDoDia) —
+ * só sessões `agendada` (confirmar uma já cancelada/realizada não faz
+ * sentido). Duas queries em vez de um único JOIN com `pacienteResponsavel`
+ * de propósito: `principal` é invariante de APLICAÇÃO
+ * (desmarcarPadraoAnterior-like em responsaveis.ts), não constraint de
+ * banco — se ela algum dia for violada, duas queries + fallback em JS só
+ * perdem a preferência de contato (usa o telefone que achar primeiro),
+ * nunca duplicam sessão na lista como um JOIN duplicaria.
+ */
+export function listarSessoesConfirmacaoDoDia(db: PsiTrackDatabase, dataLocal: string): SessaoConfirmacao[] {
+  const inicioUtc = localParaUtc(dataLocal, '00:00')
+  const fimUtc = localParaUtc(somarDiasData(dataLocal, 1), '00:00')
+
+  const linhas = db
+    .select({
+      id: sessao.id,
+      pacienteId: sessao.pacienteId,
+      recorrenciaId: sessao.recorrenciaId,
+      inicioUtc: sessao.inicioUtc,
+      duracaoMin: sessao.duracaoMin,
+      modalidade: sessao.modalidade,
+      status: sessao.status,
+      statusAlteradoEm: sessao.statusAlteradoEm,
+      avisadaEm: sessao.avisadaEm,
+      lembreteEnviadoEm: sessao.lembreteEnviadoEm,
+      motivo: sessao.motivo,
+      remarcadaParaId: sessao.remarcadaParaId,
+      observacao: sessao.observacao,
+      createdAt: sessao.createdAt,
+      updatedAt: sessao.updatedAt,
+      deletedAt: sessao.deletedAt,
+      pacienteNome: pacientes.nome,
+      pacienteNomeSocial: pacientes.nomeSocial,
+      telefonePaciente: pacientes.telefone
+    })
+    .from(sessao)
+    .innerJoin(pacientes, eq(sessao.pacienteId, pacientes.id))
+    .where(
+      and(isNull(sessao.deletedAt), eq(sessao.status, 'agendada'), gte(sessao.inicioUtc, inicioUtc), lt(sessao.inicioUtc, fimUtc))
+    )
+    .orderBy(asc(sessao.inicioUtc))
+    .all()
+
+  if (linhas.length === 0) return []
+
+  const pacienteIds = [...new Set(linhas.map((l) => l.pacienteId))]
+  const principais = db
+    .select({ pacienteId: pacienteResponsavel.pacienteId, telefone: pacienteResponsavel.telefone })
+    .from(pacienteResponsavel)
+    .where(
+      and(
+        inArray(pacienteResponsavel.pacienteId, pacienteIds),
+        eq(pacienteResponsavel.principal, true),
+        isNull(pacienteResponsavel.deletedAt)
+      )
+    )
+    .all()
+  const telefonePrincipalPorPaciente = new Map(principais.map((p) => [p.pacienteId, p.telefone]))
+
+  return linhas.map(({ telefonePaciente, ...linha }) => ({
+    ...linha,
+    telefoneContato: telefonePrincipalPorPaciente.get(linha.pacienteId) ?? telefonePaciente
+  }))
+}
+
+/** Marca/desmarca que o lembrete de confirmação foi enviado — não confundir com `avisadaEm` (aviso de falta pela paciente). */
+export function definirLembreteEnviado(db: PsiTrackDatabase, id: string, enviado: boolean): Sessao {
+  obterSessaoOuFalhar(db, id)
+  db.update(sessao)
+    .set({ lembreteEnviadoEm: enviado ? new Date().toISOString() : null, updatedAt: new Date().toISOString() })
+    .where(eq(sessao.id, id))
+    .run()
+  return obterSessaoOuFalhar(db, id)
 }

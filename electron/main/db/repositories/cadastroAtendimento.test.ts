@@ -7,8 +7,11 @@ import { runMigrations } from '../migrate'
 import { createTempDbPath } from '../test-support'
 import { precoVigenteEm } from './contratoPreco'
 import { criarPacienteComAtendimento } from './cadastroAtendimento'
+import { obterFichaClinica } from './fichaClinica'
 import { listarRecorrencias } from './recorrencia'
 import { listarSessoesPeriodo } from './sessao'
+
+const FICHA = { demandaInicial: 'Ansiedade no trabalho', abordagem: 'TCC' }
 
 const MIGRATIONS_FOLDER = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'migrations')
 
@@ -41,7 +44,8 @@ describe('criarPacienteComAtendimento', () => {
         { diaSemana: 2, horaLocal: '14:00', duracaoMin: 50, modalidade: 'presencial', vigenciaInicio: '2026-01-06' },
         { diaSemana: 4, horaLocal: '16:00', duracaoMin: 50, modalidade: 'online', vigenciaInicio: '2026-01-06' }
       ],
-      contrato: { modalidade: 'avulso', valorCentavos: 15000, vigenciaInicio: '2026-01-06' }
+      contrato: { modalidade: 'avulso', valorCentavos: 15000, vigenciaInicio: '2026-01-06' },
+      fichaClinica: FICHA
     })
 
     expect(paciente.nome).toBe('Maria Teste')
@@ -56,7 +60,8 @@ describe('criarPacienteComAtendimento', () => {
     const paciente = criarPacienteComAtendimento(db, {
       paciente: { nome: 'Ana Teste' },
       recorrencias: [{ diaSemana: 2, horaLocal: '14:00', duracaoMin: 50, modalidade: 'presencial', vigenciaInicio: '2026-01-06' }],
-      contrato: { modalidade: 'avulso', valorCentavos: 15000, vigenciaInicio: '2026-01-06' }
+      contrato: { modalidade: 'avulso', valorCentavos: 15000, vigenciaInicio: '2026-01-06' },
+      fichaClinica: FICHA
     })
     const sessoes = listarSessoesPeriodo(db, DESDE_SEMPRE, ATE_SEMPRE).filter((s) => s.pacienteId === paciente.id)
     expect(sessoes.length).toBeGreaterThan(0)
@@ -69,7 +74,8 @@ describe('criarPacienteComAtendimento', () => {
     const paciente = criarPacienteComAtendimento(db, {
       paciente: { nome: 'Sem Horário Fixo' },
       recorrencias: [],
-      contrato: { modalidade: 'avulso', valorCentavos: 20000, vigenciaInicio: '2026-01-01' }
+      contrato: { modalidade: 'avulso', valorCentavos: 20000, vigenciaInicio: '2026-01-01' },
+      fichaClinica: FICHA
     })
     expect(listarRecorrencias(db, paciente.id)).toHaveLength(0)
     expect(precoVigenteEm(db, paciente.id, '2026-06-01')?.valorCentavos).toBe(20000)
@@ -86,9 +92,44 @@ describe('criarPacienteComAtendimento', () => {
           // hora inválida — deve rejeitar e desfazer TUDO, inclusive o paciente já "criado" nesta chamada
           { diaSemana: 4, horaLocal: '99:99', duracaoMin: 50, modalidade: 'online', vigenciaInicio: '2026-01-06' }
         ],
-        contrato: { modalidade: 'avulso', valorCentavos: 15000, vigenciaInicio: '2026-01-06' }
+        contrato: { modalidade: 'avulso', valorCentavos: 15000, vigenciaInicio: '2026-01-06' },
+        fichaClinica: FICHA
       })
     ).toThrow()
+
+    const depois = db.$client.prepare('SELECT count(*) as c FROM pacientes').get() as { c: number }
+    expect(depois.c).toBe(antes.c)
+  })
+
+  it('grava a ficha clínica na mesma transação', () => {
+    const paciente = criarPacienteComAtendimento(db, {
+      paciente: { nome: 'Com Ficha' },
+      recorrencias: [],
+      contrato: { modalidade: 'avulso', valorCentavos: 15000, vigenciaInicio: '2026-01-06' },
+      fichaClinica: FICHA
+    })
+
+    const ficha = obterFichaClinica(db, paciente.id)
+    expect(ficha?.demandaInicial).toBe('Ansiedade no trabalho')
+    expect(ficha?.abordagem).toBe('TCC')
+  })
+
+  it('exige demanda inicial e abordagem, e não cria o paciente sem elas', () => {
+    const antes = db.$client.prepare('SELECT count(*) as c FROM pacientes').get() as { c: number }
+
+    for (const fichaInvalida of [
+      { demandaInicial: '', abordagem: 'TCC' },
+      { demandaInicial: 'Ansiedade', abordagem: '   ' }
+    ]) {
+      expect(() =>
+        criarPacienteComAtendimento(db, {
+          paciente: { nome: 'Paciente Sem Ficha' },
+          recorrencias: [],
+          contrato: { modalidade: 'avulso', valorCentavos: 15000, vigenciaInicio: '2026-01-06' },
+          fichaClinica: fichaInvalida
+        })
+      ).toThrow()
+    }
 
     const depois = db.$client.prepare('SELECT count(*) as c FROM pacientes').get() as { c: number }
     expect(depois.c).toBe(antes.c)

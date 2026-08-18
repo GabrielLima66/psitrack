@@ -7,11 +7,14 @@ import { runMigrations } from '../migrate'
 import { createTempDbPath } from '../test-support'
 import { criarPaciente } from './pacientes'
 import { criarRecorrencia, listarRecorrencias, type Recorrencia } from './recorrencia'
+import { criarResponsavel } from './responsaveis'
 import {
   alterarStatusSessao,
   criarSessaoAvulsa,
+  definirLembreteEnviado,
   encerrarAgendaDoPaciente,
   encerrarSerie,
+  listarSessoesConfirmacaoDoDia,
   listarSessoesPeriodo,
   materializarRecorrencia,
   materializarTodasRecorrencias,
@@ -237,5 +240,57 @@ describe('encerrarAgendaDoPaciente', () => {
       (s) => s.pacienteId === outroPacienteId
     )
     expect(sessoesOutro).toHaveLength(12)
+  })
+})
+
+describe('listarSessoesConfirmacaoDoDia', () => {
+  it('só retorna sessões agendada do dia local pedido', () => {
+    criarSessaoAvulsa(db, { pacienteId, dataLocal: '2026-03-10', horaLocal: '14:00', modalidade: 'presencial' })
+    const outra = criarSessaoAvulsa(db, { pacienteId, dataLocal: '2026-03-11', horaLocal: '14:00', modalidade: 'presencial' })
+    const realizada = criarSessaoAvulsa(db, { pacienteId, dataLocal: '2026-03-10', horaLocal: '16:00', modalidade: 'presencial' })
+    alterarStatusSessao(db, realizada.id, { status: 'realizada' })
+
+    const confirmacoes = listarSessoesConfirmacaoDoDia(db, '2026-03-10')
+
+    expect(confirmacoes.map((s) => s.id)).not.toContain(outra.id)
+    expect(confirmacoes.map((s) => s.id)).not.toContain(realizada.id)
+    expect(confirmacoes).toHaveLength(1)
+  })
+
+  it('usa telefone do paciente quando não há responsável principal', () => {
+    const p = criarPaciente(db, { nome: 'Paciente Com Telefone', telefone: '11987654321' })
+    criarSessaoAvulsa(db, { pacienteId: p.id, dataLocal: '2026-03-10', horaLocal: '14:00', modalidade: 'presencial' })
+
+    const [confirmacao] = listarSessoesConfirmacaoDoDia(db, '2026-03-10')
+    expect(confirmacao?.telefoneContato).toBe('11987654321')
+  })
+
+  it('prefere telefone do responsável principal ao do paciente', () => {
+    const p = criarPaciente(db, { nome: 'Paciente Menor', telefone: '11111111111' })
+    criarResponsavel(db, p.id, { nome: 'Mãe', parentesco: 'mae', telefone: '11999998888', principal: true })
+    criarSessaoAvulsa(db, { pacienteId: p.id, dataLocal: '2026-03-10', horaLocal: '14:00', modalidade: 'presencial' })
+
+    const [confirmacao] = listarSessoesConfirmacaoDoDia(db, '2026-03-10')
+    expect(confirmacao?.telefoneContato).toBe('11999998888')
+  })
+
+  it('telefoneContato é null quando nem paciente nem responsável têm telefone', () => {
+    const p = criarPaciente(db, { nome: 'Paciente Sem Telefone' })
+    criarSessaoAvulsa(db, { pacienteId: p.id, dataLocal: '2026-03-10', horaLocal: '14:00', modalidade: 'presencial' })
+
+    const [confirmacao] = listarSessoesConfirmacaoDoDia(db, '2026-03-10')
+    expect(confirmacao?.telefoneContato).toBeNull()
+  })
+})
+
+describe('definirLembreteEnviado', () => {
+  it('marca e desmarca o lembrete', () => {
+    const s = criarSessaoAvulsa(db, { pacienteId, dataLocal: '2026-03-10', horaLocal: '14:00', modalidade: 'presencial' })
+
+    const marcada = definirLembreteEnviado(db, s.id, true)
+    expect(marcada.lembreteEnviadoEm).not.toBeNull()
+
+    const desmarcada = definirLembreteEnviado(db, s.id, false)
+    expect(desmarcada.lembreteEnviadoEm).toBeNull()
   })
 })

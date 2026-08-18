@@ -4,7 +4,9 @@ import { alterarStatusSessaoComCobranca, remarcarSessaoComCobranca } from '../db
 import { conflitosRecorrencia, criarRecorrencia, listarRecorrencias, type RecorrenciaInput } from '../db/repositories/recorrencia'
 import {
   criarSessaoAvulsa,
+  definirLembreteEnviado,
   encerrarSerie,
+  listarSessoesConfirmacaoDoDia,
   listarSessoesPeriodo,
   materializarRecorrencia,
   sobreposicaoHorario,
@@ -70,5 +72,13 @@ export function registerAgendaHandlers(): void {
 
   ipcMain.handle('sessao:sobreposicao', (_event, inicioUtc: string, duracaoMin: number, excludingId?: string) =>
     safely(() => ({ colisoes: sobreposicaoHorario(getDb(), inicioUtc, duracaoMin, excludingId) }))
+  )
+
+  ipcMain.handle('sessao:listarConfirmacaoDoDia', (_event, dataLocal: string) =>
+    safely(() => ({ sessoes: listarSessoesConfirmacaoDoDia(getDb(), dataLocal) }))
+  )
+
+  ipcMain.handle('sessao:definirLembreteEnviado', (_event, id: string, enviado: boolean) =>
+    safely(() => ({ sessao: definirLembreteEnviado(getDb(), id, enviado) }))
   )
 }

@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { ConfirmarAcao } from '@/components/ui/confirmar-acao'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -136,9 +137,15 @@ export function PacientePendenteGrupo({ pacienteId, pacienteNome, lancamentos, c
             </div>
           </div>
           <div className="flex gap-2">
-            <Button type="button" size="sm" disabled={salvando || !pagadorNome.trim()} onClick={handleRegistrar}>
-              {salvando ? 'Registrando…' : 'Confirmar pagamento'}
-            </Button>
+            <ConfirmarAcao
+              rotulo="Confirmar pagamento"
+              titulo="Confirmar pagamento"
+              descricao={`Marca ${formatarCentavos(totalSelecionado)} como pago. Dá pra estornar depois, na aba Financeiro da ficha do paciente, se for engano.`}
+              rotuloConfirmar="Sim, confirmar pagamento"
+              disabled={!pagadorNome.trim()}
+              busy={salvando}
+              onConfirmar={handleRegistrar}
+            />
             <Button type="button" variant="ghost" size="sm" onClick={store.fecharRegistrar}>
               Cancelar
             </Button>

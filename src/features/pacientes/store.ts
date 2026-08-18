@@ -4,6 +4,7 @@ import type {
   ConflitoRecorrencia,
   ContratoPreco,
   ContratoPrecoInput,
+  EstornarPagamentoInput,
   Lancamento,
   LancamentoAjusteInput,
   MarcarReciboEmitidoInput,
@@ -19,8 +20,16 @@ import type {
   AnotacaoInput,
   CriarEvolucaoComSessaoRetroativaInput,
   CriarEvolucaoInput,
+  Diagnostico,
+  DiagnosticoInput,
+  Encaminhamento,
+  EncaminhamentoInput,
   Evolucao,
+  FichaClinica,
+  FichaClinicaInput,
   ListarPacientesOptions,
+  Medicamento,
+  MedicamentoInput,
   Paciente,
   PacienteComUltimaSessao,
   PacienteInput,
@@ -33,6 +42,16 @@ export type PacientesScreen = 'lista' | 'form'
 
 function contratoRascunhoVazio(): ContratoPrecoInput {
   return { modalidade: 'avulso', valorCentavos: 0, politicaFalta: 'cobra_sem_aviso', vigenciaInicio: hojeLocal() }
+}
+
+/** Rascunho do quadro clínico durante o cadastro (SPEC-fase-5.md, revisão de D49) — string simples, nunca null, pra controlar o Input direto. */
+export interface FichaRascunho {
+  demandaInicial: string
+  abordagem: string
+}
+
+function fichaRascunhoVazia(): FichaRascunho {
+  return { demandaInicial: '', abordagem: '' }
 }
 
 interface PacientesStoreState {
@@ -80,6 +99,25 @@ interface PacientesStoreState {
   atualizarAnotacao: (id: string, input: AnotacaoInput) => Promise<void>
   excluirAnotacao: (id: string) => Promise<void>
 
+  // Aba Informações clínicas (Etapa 22/SPEC-fase-5.md): retrato clínico
+  // estável, editável — ao contrário da evolução, que é append-only.
+  fichaClinica: FichaClinica | null
+  medicamentos: Medicamento[]
+  diagnosticos: Diagnostico[]
+  encaminhamentos: Encaminhamento[]
+  clinicoError: string | null
+  carregarClinico: () => Promise<void>
+  salvarFichaClinica: (input: FichaClinicaInput) => Promise<boolean>
+  criarMedicamento: (input: MedicamentoInput) => Promise<boolean>
+  atualizarMedicamento: (id: string, input: MedicamentoInput) => Promise<boolean>
+  removerMedicamento: (id: string) => Promise<void>
+  criarDiagnostico: (input: DiagnosticoInput) => Promise<boolean>
+  atualizarDiagnostico: (id: string, input: DiagnosticoInput) => Promise<boolean>
+  removerDiagnostico: (id: string) => Promise<void>
+  criarEncaminhamento: (input: EncaminhamentoInput) => Promise<boolean>
+  atualizarEncaminhamento: (id: string, input: EncaminhamentoInput) => Promise<boolean>
+  removerEncaminhamento: (id: string) => Promise<void>
+
   // Aba Documentos (Etapa 16): ativos e lixeira carregados juntos, mesmo
   // padrão de carregarFinanceiro. `anexosError` é só pra falha real de IPC —
   // diálogo cancelado pela usuária nunca vira erro.
@@ -101,10 +139,13 @@ interface PacientesStoreState {
   recorrenciasRascunho: RecorrenciaInput[]
   contratoRascunho: ContratoPrecoInput
   recorrenciasPaciente: Recorrencia[]
+  /** Quadro clínico (demanda inicial + abordagem) — obrigatório só no cadastro novo (SPEC-fase-5.md, revisão de D49). */
+  fichaRascunho: FichaRascunho
 
   adicionarRecorrenciaRascunho: (input: RecorrenciaInput) => void
   removerRecorrenciaRascunho: (index: number) => void
   setContratoRascunho: (contrato: ContratoPrecoInput) => void
+  setFichaRascunho: (ficha: FichaRascunho) => void
 
   adicionarRecorrenciaExistente: (input: RecorrenciaInput) => Promise<void>
   encerrarRecorrenciaExistente: (id: string, vigenciaFim: string) => Promise<void>
@@ -133,7 +174,9 @@ interface PacientesStoreState {
   reajustarContrato: (input: ContratoPrecoInput) => Promise<number | null> // devolve quantos lançamentos existem no período afetado, ou null se falhou
   criarLancamentoAjuste: (input: LancamentoAjusteInput) => Promise<boolean>
   cancelarLancamento: (id: string) => Promise<void>
+  reabrirLancamento: (id: string) => Promise<void>
   marcarReciboEmitido: (pagamentoId: string, input: MarcarReciboEmitidoInput) => Promise<void>
+  estornarPagamento: (pagamentoId: string, input: EstornarPagamentoInput) => Promise<boolean>
 }
 
 export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
@@ -158,9 +201,16 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
   anexosBusy: false,
   anexosError: null,
 
+  fichaClinica: null,
+  medicamentos: [],
+  diagnosticos: [],
+  encaminhamentos: [],
+  clinicoError: null,
+
   recorrenciasRascunho: [],
   contratoRascunho: contratoRascunhoVazio(),
   recorrenciasPaciente: [],
+  fichaRascunho: fichaRascunhoVazia(),
   prefillEvolucao: null,
   pendenciaFinanceira: null,
 
@@ -213,12 +263,18 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
       recorrenciasRascunho: [],
       contratoRascunho: contratoRascunhoVazio(),
       recorrenciasPaciente: [],
+      fichaRascunho: fichaRascunhoVazia(),
       prefillEvolucao: null,
       pendenciaFinanceira: null,
       contratoVigente: null,
       historicoContratos: [],
       lancamentos: [],
-      pagamentos: []
+      pagamentos: [],
+      fichaClinica: null,
+      medicamentos: [],
+      diagnosticos: [],
+      encaminhamentos: [],
+      clinicoError: null
     }),
 
   abrirEdicaoPaciente: async (paciente) => {
@@ -238,14 +294,20 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
       contratoVigente: null,
       historicoContratos: [],
       lancamentos: [],
-      pagamentos: []
+      pagamentos: [],
+      fichaClinica: null,
+      medicamentos: [],
+      diagnosticos: [],
+      encaminhamentos: [],
+      clinicoError: null
     })
-    // Financeiro/Documentos só dependem do id (já setado acima), não do
-    // resultado das 4 chamadas abaixo — dispara em paralelo com elas em vez
-    // de encadeado depois, senão a ficha paga dois round-trips IPC em série
-    // pra só abrir.
+    // Financeiro/Documentos/Clínico só dependem do id (já setado acima), não
+    // do resultado das 4 chamadas abaixo — dispara em paralelo com elas em
+    // vez de encadeado depois, senão a ficha paga dois round-trips IPC em
+    // série pra só abrir.
     void get().carregarFinanceiro()
     void get().carregarAnexos()
+    void get().carregarClinico()
     const [responsaveis, evolucoes, anotacoes, recorrencias] = await Promise.all([
       window.psitrack.responsavel.listar(paciente.id),
       window.psitrack.evolucao.listar(paciente.id),
@@ -271,7 +333,11 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
       : await window.psitrack.paciente.criarComAtendimento({
           paciente: input,
           recorrencias: get().recorrenciasRascunho,
-          contrato: get().contratoRascunho
+          contrato: get().contratoRascunho,
+          fichaClinica: {
+            demandaInicial: get().fichaRascunho.demandaInicial.trim(),
+            abordagem: get().fichaRascunho.abordagem.trim()
+          }
         })
 
     if (result.ok) {
@@ -280,6 +346,7 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
         const recorrencias = await window.psitrack.recorrencia.listar(result.paciente.id)
         if (recorrencias.ok) set({ recorrenciasPaciente: recorrencias.recorrencias })
         void get().carregarFinanceiro()
+        void get().carregarClinico()
       }
       return true
     }
@@ -427,6 +494,127 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
     if (lista.ok) set({ anotacoes: lista.anotacoes })
   },
 
+  carregarClinico: async () => {
+    const paciente = get().pacienteEmEdicao
+    if (!paciente) return
+    set({ clinicoError: null })
+    const [ficha, medicamentos, diagnosticos, encaminhamentos] = await Promise.all([
+      window.psitrack.clinico.obterFicha(paciente.id),
+      window.psitrack.clinico.listarMedicamentos(paciente.id),
+      window.psitrack.clinico.listarDiagnosticos(paciente.id),
+      window.psitrack.clinico.listarEncaminhamentos(paciente.id)
+    ])
+    if (ficha.ok) set({ fichaClinica: ficha.ficha })
+    if (medicamentos.ok) set({ medicamentos: medicamentos.medicamentos })
+    if (diagnosticos.ok) set({ diagnosticos: diagnosticos.diagnosticos })
+    if (encaminhamentos.ok) set({ encaminhamentos: encaminhamentos.encaminhamentos })
+  },
+
+  salvarFichaClinica: async (input) => {
+    const paciente = get().pacienteEmEdicao
+    if (!paciente) return false
+    const result = await window.psitrack.clinico.salvarFicha(paciente.id, input)
+    if (!result.ok) {
+      set({ clinicoError: result.error })
+      return false
+    }
+    set({ fichaClinica: result.ficha, clinicoError: null })
+    return true
+  },
+
+  criarMedicamento: async (input) => {
+    const paciente = get().pacienteEmEdicao
+    if (!paciente) return false
+    const result = await window.psitrack.clinico.criarMedicamento(paciente.id, input)
+    if (!result.ok) {
+      set({ clinicoError: result.error })
+      return false
+    }
+    await get().carregarClinico()
+    return true
+  },
+
+  atualizarMedicamento: async (id, input) => {
+    const result = await window.psitrack.clinico.atualizarMedicamento(id, input)
+    if (!result.ok) {
+      set({ clinicoError: result.error })
+      return false
+    }
+    await get().carregarClinico()
+    return true
+  },
+
+  removerMedicamento: async (id) => {
+    const result = await window.psitrack.clinico.removerMedicamento(id)
+    if (!result.ok) {
+      set({ clinicoError: result.error })
+      return
+    }
+    await get().carregarClinico()
+  },
+
+  criarDiagnostico: async (input) => {
+    const paciente = get().pacienteEmEdicao
+    if (!paciente) return false
+    const result = await window.psitrack.clinico.criarDiagnostico(paciente.id, input)
+    if (!result.ok) {
+      set({ clinicoError: result.error })
+      return false
+    }
+    await get().carregarClinico()
+    return true
+  },
+
+  atualizarDiagnostico: async (id, input) => {
+    const result = await window.psitrack.clinico.atualizarDiagnostico(id, input)
+    if (!result.ok) {
+      set({ clinicoError: result.error })
+      return false
+    }
+    await get().carregarClinico()
+    return true
+  },
+
+  removerDiagnostico: async (id) => {
+    const result = await window.psitrack.clinico.removerDiagnostico(id)
+    if (!result.ok) {
+      set({ clinicoError: result.error })
+      return
+    }
+    await get().carregarClinico()
+  },
+
+  criarEncaminhamento: async (input) => {
+    const paciente = get().pacienteEmEdicao
+    if (!paciente) return false
+    const result = await window.psitrack.clinico.criarEncaminhamento(paciente.id, input)
+    if (!result.ok) {
+      set({ clinicoError: result.error })
+      return false
+    }
+    await get().carregarClinico()
+    return true
+  },
+
+  atualizarEncaminhamento: async (id, input) => {
+    const result = await window.psitrack.clinico.atualizarEncaminhamento(id, input)
+    if (!result.ok) {
+      set({ clinicoError: result.error })
+      return false
+    }
+    await get().carregarClinico()
+    return true
+  },
+
+  removerEncaminhamento: async (id) => {
+    const result = await window.psitrack.clinico.removerEncaminhamento(id)
+    if (!result.ok) {
+      set({ clinicoError: result.error })
+      return
+    }
+    await get().carregarClinico()
+  },
+
   carregarAnexos: async () => {
     const paciente = get().pacienteEmEdicao
     if (!paciente) return
@@ -500,6 +688,7 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
     set((state) => ({ recorrenciasRascunho: state.recorrenciasRascunho.filter((_, i) => i !== index) })),
 
   setContratoRascunho: (contrato) => set({ contratoRascunho: contrato }),
+  setFichaRascunho: (ficha) => set({ fichaRascunho: ficha }),
 
   adicionarRecorrenciaExistente: async (input) => {
     const paciente = get().pacienteEmEdicao
@@ -595,6 +784,15 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
     await get().carregarFinanceiro()
   },
 
+  reabrirLancamento: async (id) => {
+    const result = await window.psitrack.lancamento.reabrir(id)
+    if (!result.ok) {
+      set({ financeiroError: result.error })
+      return
+    }
+    await get().carregarFinanceiro()
+  },
+
   marcarReciboEmitido: async (pagamentoId, input) => {
     const result = await window.psitrack.pagamento.marcarReciboEmitido(pagamentoId, input)
     if (!result.ok) {
@@ -602,5 +800,15 @@ export const usePacientesStore = create<PacientesStoreState>((set, get) => ({
       return
     }
     await get().carregarFinanceiro()
+  },
+
+  estornarPagamento: async (pagamentoId, input) => {
+    const result = await window.psitrack.pagamento.estornar(pagamentoId, input)
+    if (!result.ok) {
+      set({ financeiroError: result.error })
+      return false
+    }
+    await get().carregarFinanceiro()
+    return true
   }
 }))

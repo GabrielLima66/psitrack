@@ -8,12 +8,15 @@ import {
   criarLancamentoAjuste,
   listarLancamentosPaciente,
   listarLancamentosPendentesTodos,
+  reabrirLancamento,
   type LancamentoAjusteInput
 } from '../db/repositories/lancamento'
 import {
+  estornarPagamento,
   listarPagamentosPaciente,
   marcarReciboEmitido,
   registrarPagamento,
+  type EstornarPagamentoInput,
   type MarcarReciboEmitidoInput,
   type RegistrarPagamentoInput
 } from '../db/repositories/pagamento'
@@ -45,6 +48,8 @@ export function registerFinanceiroHandlers(): void {
 
   ipcMain.handle('lancamento:cancelar', (_event, id: string) => safely(() => ({ lancamento: cancelarLancamento(getDb(), id) })))
 
+  ipcMain.handle('lancamento:reabrir', (_event, id: string) => safely(() => ({ lancamento: reabrirLancamento(getDb(), id) })))
+
   ipcMain.handle('lancamento:listarPendentesTodos', () => safely(() => ({ lancamentos: listarLancamentosPendentesTodos(getDb()) })))
 
   ipcMain.handle('pagamento:registrar', (_event, pacienteId: string, input: RegistrarPagamentoInput) =>
@@ -57,6 +62,10 @@ export function registerFinanceiroHandlers(): void {
 
   ipcMain.handle('pagamento:marcarReciboEmitido', (_event, id: string, input: MarcarReciboEmitidoInput) =>
     safely(() => ({ pagamento: marcarReciboEmitido(getDb(), id, input) }))
+  )
+
+  ipcMain.handle('pagamento:estornar', (_event, id: string, input: EstornarPagamentoInput) =>
+    safely(() => ({ pagamento: estornarPagamento(getDb(), id, input) }))
   )
 
   ipcMain.handle('relatorio:mensal', (_event, competencia: string) => safely(() => ({ relatorio: gerarRelatorioMensal(getDb(), competencia) })))

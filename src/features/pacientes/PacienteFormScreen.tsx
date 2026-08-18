@@ -1,4 +1,4 @@
-import { ChevronLeft, Lock, NotebookText, Paperclip, User, Wallet } from 'lucide-react'
+import { ChevronLeft, Lock, NotebookText, Paperclip, Stethoscope, User, Wallet } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -15,8 +15,10 @@ import { AtendimentoInicialSection } from './AtendimentoInicialSection'
 import { DocumentosSection } from './DocumentosSection'
 import { EvolucaoSection } from './EvolucaoSection'
 import { FinanceiroSection } from './FinanceiroSection'
+import { InformacoesClinicasSection } from './InformacoesClinicasSection'
 import { formatarMesAnoBr, formatarStatus } from './formatters'
 import { calcularIdade, isMenorDeIdade } from './idade'
+import { QuadroClinicoCard } from './QuadroClinicoCard'
 import { ResponsaveisSection } from './ResponsaveisSection'
 import { usePacientesStore } from './store'
 
@@ -83,6 +85,8 @@ export function PacienteFormScreen() {
       removerRecorrenciaRascunho: s.removerRecorrenciaRascunho,
       contratoRascunho: s.contratoRascunho,
       setContratoRascunho: s.setContratoRascunho,
+      fichaRascunho: s.fichaRascunho,
+      setFichaRascunho: s.setFichaRascunho,
       recorrenciasPaciente: s.recorrenciasPaciente,
       adicionarRecorrenciaExistente: s.adicionarRecorrenciaExistente,
       encerrarRecorrenciaExistente: s.encerrarRecorrenciaExistente,
@@ -96,7 +100,26 @@ export function PacienteFormScreen() {
       reajustarContrato: s.reajustarContrato,
       criarLancamentoAjuste: s.criarLancamentoAjuste,
       cancelarLancamento: s.cancelarLancamento,
+      reabrirLancamento: s.reabrirLancamento,
       marcarReciboEmitido: s.marcarReciboEmitido,
+      estornarPagamento: s.estornarPagamento,
+
+      fichaClinica: s.fichaClinica,
+      medicamentos: s.medicamentos,
+      diagnosticos: s.diagnosticos,
+      encaminhamentos: s.encaminhamentos,
+      clinicoError: s.clinicoError,
+      carregarClinico: s.carregarClinico,
+      salvarFichaClinica: s.salvarFichaClinica,
+      criarMedicamento: s.criarMedicamento,
+      atualizarMedicamento: s.atualizarMedicamento,
+      removerMedicamento: s.removerMedicamento,
+      criarDiagnostico: s.criarDiagnostico,
+      atualizarDiagnostico: s.atualizarDiagnostico,
+      removerDiagnostico: s.removerDiagnostico,
+      criarEncaminhamento: s.criarEncaminhamento,
+      atualizarEncaminhamento: s.atualizarEncaminhamento,
+      removerEncaminhamento: s.removerEncaminhamento,
 
       anexos: s.anexos,
       anexosLixeira: s.anexosLixeira,
@@ -250,13 +273,21 @@ export function PacienteFormScreen() {
             {store.formError && <p className="text-sm text-destructive">{store.formError}</p>}
 
             {!existente && (
-              <Button type="submit" disabled={store.formBusy} className="w-full">
+              <Button
+                type="submit"
+                disabled={store.formBusy || !store.fichaRascunho.demandaInicial.trim() || !store.fichaRascunho.abordagem.trim()}
+                className="w-full"
+              >
                 {store.formBusy ? 'Salvando…' : 'Salvar paciente'}
               </Button>
             )}
           </div>
         </form>
       </div>
+
+      {!existente && <QuadroClinicoCard modo="criacao" valor={store.fichaRascunho} onChange={store.setFichaRascunho} />}
+
+      {existente && <QuadroClinicoCard modo="edicao" ficha={store.fichaClinica} onSalvar={store.salvarFichaClinica} />}
 
       {!existente && (
         <AtendimentoInicialSection
@@ -391,6 +422,10 @@ export function PacienteFormScreen() {
                 <User className="size-[14px]" />
                 Cadastro
               </TabsTrigger>
+              <TabsTrigger value="clinico" className={TAB_TRIGGER_CLASS}>
+                <Stethoscope className="size-[14px]" />
+                Informações clínicas
+              </TabsTrigger>
               <TabsTrigger value="evolucao" className={TAB_TRIGGER_CLASS}>
                 <NotebookText className="size-[14px]" />
                 Evolução clínica
@@ -412,6 +447,24 @@ export function PacienteFormScreen() {
 
           <div className="mx-auto min-h-0 w-full max-w-[1040px] flex-1 overflow-y-auto px-8 py-6">
             <TabsContent value="cadastro">{cadastroConteudo}</TabsContent>
+
+            <TabsContent value="clinico">
+              <InformacoesClinicasSection
+                medicamentos={store.medicamentos}
+                diagnosticos={store.diagnosticos}
+                encaminhamentos={store.encaminhamentos}
+                error={store.clinicoError}
+                onCriarMedicamento={store.criarMedicamento}
+                onAtualizarMedicamento={store.atualizarMedicamento}
+                onRemoverMedicamento={store.removerMedicamento}
+                onCriarDiagnostico={store.criarDiagnostico}
+                onAtualizarDiagnostico={store.atualizarDiagnostico}
+                onRemoverDiagnostico={store.removerDiagnostico}
+                onCriarEncaminhamento={store.criarEncaminhamento}
+                onAtualizarEncaminhamento={store.atualizarEncaminhamento}
+                onRemoverEncaminhamento={store.removerEncaminhamento}
+              />
+            </TabsContent>
 
             <TabsContent value="evolucao">
               {store.pendenciaFinanceira && (
@@ -447,7 +500,9 @@ export function PacienteFormScreen() {
                 onReajustar={store.reajustarContrato}
                 onCriarAjuste={store.criarLancamentoAjuste}
                 onCancelarLancamento={store.cancelarLancamento}
+                onReabrirLancamento={store.reabrirLancamento}
                 onMarcarReciboEmitido={store.marcarReciboEmitido}
+                onEstornarPagamento={store.estornarPagamento}
               />
             </TabsContent>
             <TabsContent value="documentos">

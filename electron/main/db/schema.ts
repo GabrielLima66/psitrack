@@ -150,6 +150,12 @@ export const sessao = sqliteTable(
       .$type<'agendada' | 'realizada' | 'remarcada' | 'cancelada_profissional' | 'falta_sem_aviso' | 'falta_com_aviso'>(),
     statusAlteradoEm: text('status_alterado_em'),
     avisadaEm: text('avisada_em'), // pra calcular aviso prévio de falta
+    // Não confundir com avisadaEm: aquela é a PACIENTE avisando falta com
+    // antecedência; esta é a PSICÓLOGA confirmando que mandou o lembrete de
+    // confirmação de sessão (ver mensagens/whatsapp.ts). Mesmo raciocínio de
+    // pagamento.reciboEmitidoEm — metadado sobre um evento externo, gravado
+    // uma vez, nunca fato reescrito.
+    lembreteEnviadoEm: text('lembrete_enviado_em'),
     motivo: text('motivo'),
     remarcadaParaId: text('remarcada_para_id').references((): AnySQLiteColumn => sessao.id), // encaixe: aponta pra sessão nova
     observacao: text('observacao'), // logística, NUNCA clínico
@@ -244,6 +250,14 @@ export const pagamento = sqliteTable('pagamento', {
   pagadorCpf: text('pagador_cpf'),
   reciboEmitidoEm: text('recibo_emitido_em'),
   reciboReferencia: text('recibo_referencia'), // número gerado pela Receita
+  // Gravado uma vez, nunca reescrito — mesmo raciocínio de reciboEmitidoEm:
+  // metadado sobre um evento posterior, sem tocar nos fatos originais do
+  // pagamento. `deletedAt` não serve pra isto: estorno precisa continuar
+  // visível (nunca "excluído da visão, restaurável" como o resto do soft
+  // delete), só marcado. Lançamentos ligados voltam a pendente no estorno
+  // (ver estornarPagamento) — o rastro mora inteiro aqui, não numa tabela à parte.
+  estornadoEm: text('estornado_em'),
+  motivoEstorno: text('motivo_estorno'),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
   deletedAt: text('deleted_at')
@@ -283,4 +297,128 @@ export const anexo = sqliteTable(
     index('idx_anexo_paciente').on(t.pacienteId, t.classificacao, t.deletedAt),
     index('idx_anexo_evolucao').on(t.evolucaoId)
   ]
+)
+
+/**
+ * Modelo de mensagem de confirmação de sessão (mensagens/PainelConfirmacoesDoDia).
+ * Flat de propósito — sem coluna `tipo`: hoje só existe um uso (confirmação
+ * de sessão), e um enum com um valor só é generalidade especulativa.
+ * `padrao` é o template usado automaticamente no painel diário — no máximo
+ * um ativo por vez (regra de aplicação, ver desmarcarPadraoAnterior, mesmo
+ * padrão de `pacienteResponsavel.principal`).
+ */
+export const mensagemTemplate = sqliteTable('mensagem_template', {
+  id: text('id').primaryKey(),
+  nome: text('nome').notNull(),
+  corpo: text('corpo').notNull(), // placeholders: {paciente} {data} {hora} {modalidade}
+  padrao: integer('padrao', { mode: 'boolean' }).notNull().default(false),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  deletedAt: text('deleted_at')
+})
+
+/**
+ * Retrato clínico estável (SPEC-fase-5.md): o que a evolução, sendo diário,
+ * não responde — "qual é a situação agora". As quatro tabelas abaixo são
+ * EDITÁVEIS de propósito (D43): a invariante append-only (#1) é sobre o
+ * registro do que aconteceu numa data, não sobre cadastro de estado atual —
+ * corrigir o nome de um remédio digitado errado não pode exigir o ritual de
+ * retificação. Tudo aqui é prontuário e entra em export (D48).
+ *
+ * Nada disto vira coluna em `pacientes`: aquela tabela é identificação,
+ * contato e cobrança, e nada clínico (SPEC-fase-1.md D1/D2) — inclusive os
+ * dois campos narrativos abaixo, que "caberiam" numa coluna.
+ */
+export const pacienteFichaClinica = sqliteTable(
+  'paciente_ficha_clinica',
+  {
+    id: text('id').primaryKey(),
+    pacienteId: text('paciente_id')
+      .notNull()
+      .references(() => pacientes.id),
+    demandaInicial: text('demanda_inicial'), // o que a trouxe
+    abordagem: text('abordagem'), // TCC, psicanálise, ACT…
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+    deletedAt: text('deleted_at')
+  },
+  (t) => [
+    // 1:1 com paciente — único só entre não-deletados, mesmo padrão do CPF.
+    uniqueIndex('idx_ficha_clinica_paciente')
+      .on(t.pacienteId)
+      .where(sql`${t.deletedAt} is null`)
+  ]
+)
+
+/**
+ * O histórico sai de `inicio`/`fim` na própria linha (D44), nunca de
+ * versionamento: `fim = null` é "em uso hoje". Uma consulta só responde
+ * "toma hoje?" e "já tomou?". `prescritor` existe porque a informação é
+ * RELATADA — pela paciente ou pelo psiquiatra — e a origem importa na
+ * leitura clínica; psicóloga não prescreve e o app nunca trata isto como
+ * prescrição (D46).
+ */
+export const pacienteMedicamento = sqliteTable(
+  'paciente_medicamento',
+  {
+    id: text('id').primaryKey(),
+    pacienteId: text('paciente_id')
+      .notNull()
+      .references(() => pacientes.id),
+    nome: text('nome').notNull(),
+    dose: text('dose'), // "50mg, 1x ao dia" — texto livre, nunca numérico
+    prescritor: text('prescritor'),
+    inicio: text('inicio'), // 'YYYY-MM-DD' — nullable: nem sempre se sabe
+    fim: text('fim'), // 'YYYY-MM-DD' — null = em uso hoje (D44)
+    observacao: text('observacao'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+    deletedAt: text('deleted_at')
+  },
+  (t) => [index('idx_medicamento_paciente').on(t.pacienteId, t.deletedAt)]
+)
+
+/** `cid` é texto livre — sem tabela de CID embutida, e o app nunca valida código (fora de escopo, SPEC-fase-5.md §5). */
+export const pacienteDiagnostico = sqliteTable(
+  'paciente_diagnostico',
+  {
+    id: text('id').primaryKey(),
+    pacienteId: text('paciente_id')
+      .notNull()
+      .references(() => pacientes.id),
+    descricao: text('descricao').notNull(),
+    cid: text('cid'),
+    data: text('data'), // 'YYYY-MM-DD' — quando foi comunicado/registrado
+    profissional: text('profissional'), // quem diagnosticou
+    observacao: text('observacao'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+    deletedAt: text('deleted_at')
+  },
+  (t) => [index('idx_diagnostico_paciente').on(t.pacienteId, t.deletedAt)]
+)
+
+/**
+ * Encaminhamento de SAÍDA (D47): ela encaminha a paciente pra outro
+ * profissional. Quem encaminhou a paciente ATÉ ela continua sendo o campo
+ * `origem` de `pacientes` — dois sentidos no mesmo rótulo seria ambiguidade
+ * garantida na leitura.
+ */
+export const pacienteEncaminhamento = sqliteTable(
+  'paciente_encaminhamento',
+  {
+    id: text('id').primaryKey(),
+    pacienteId: text('paciente_id')
+      .notNull()
+      .references(() => pacientes.id),
+    paraQuem: text('para_quem').notNull(), // nome do profissional ou serviço
+    especialidade: text('especialidade'), // psiquiatria, neuro, nutrição…
+    data: text('data').notNull(), // 'YYYY-MM-DD'
+    motivo: text('motivo'),
+    observacao: text('observacao'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+    deletedAt: text('deleted_at')
+  },
+  (t) => [index('idx_encaminhamento_paciente').on(t.pacienteId, t.deletedAt)]
 )

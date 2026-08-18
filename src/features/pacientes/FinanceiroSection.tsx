@@ -2,11 +2,22 @@ import { useState } from 'react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { ConfirmarAcao } from '@/components/ui/confirmar-acao'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import type { ContratoPreco, ContratoPrecoInput, Lancamento, LancamentoAjusteInput, MarcarReciboEmitidoInput, Pagamento, PoliticaFalta } from '../agenda/types'
+import type {
+  ContratoPreco,
+  ContratoPrecoInput,
+  EstornarPagamentoInput,
+  Lancamento,
+  LancamentoAjusteInput,
+  MarcarReciboEmitidoInput,
+  Pagamento,
+  PoliticaFalta
+} from '../agenda/types'
 import { ChevronDown } from 'lucide-react'
+import { formatarDataHoraBr } from '../configuracoes/formatters'
 import { hojeLocal as hoje } from '../agenda/tempo'
 import {
   formatarCentavos,
@@ -28,7 +39,9 @@ interface FinanceiroSectionProps {
   onReajustar: (input: ContratoPrecoInput) => Promise<number | null>
   onCriarAjuste: (input: LancamentoAjusteInput) => Promise<boolean>
   onCancelarLancamento: (id: string) => Promise<void>
+  onReabrirLancamento: (id: string) => Promise<void>
   onMarcarReciboEmitido: (pagamentoId: string, input: MarcarReciboEmitidoInput) => Promise<void>
+  onEstornarPagamento: (pagamentoId: string, input: EstornarPagamentoInput) => Promise<boolean>
 }
 
 const POLITICA_OPTIONS: { value: PoliticaFalta; label: string }[] = [
@@ -46,7 +59,9 @@ export function FinanceiroSection({
   onReajustar,
   onCriarAjuste,
   onCancelarLancamento,
-  onMarcarReciboEmitido
+  onReabrirLancamento,
+  onMarcarReciboEmitido,
+  onEstornarPagamento
 }: FinanceiroSectionProps) {
   const [reajustando, setReajustando] = useState(false)
   const [novoValor, setNovoValor] = useState('')
@@ -93,10 +108,10 @@ export function FinanceiroSection({
     }
   }
 
-  function abrirEmitirRecibo(pagamentoId: string): void {
-    setEmitindoReciboId(pagamentoId)
-    setReciboData(hoje())
-    setReciboReferencia('')
+  function abrirEmitirRecibo(pagamento: Pagamento): void {
+    setEmitindoReciboId(pagamento.id)
+    setReciboData(pagamento.reciboEmitidoEm ?? hoje())
+    setReciboReferencia(pagamento.reciboReferencia ?? '')
   }
 
   async function handleMarcarRecibo(): Promise<void> {
@@ -199,9 +214,14 @@ export function FinanceiroSection({
               </div>
             </div>
             <div className="flex gap-2">
-              <Button type="button" size="sm" onClick={handleReajustar}>
-                Confirmar reajuste
-              </Button>
+              <ConfirmarAcao
+                rotulo="Confirmar reajuste"
+                titulo="Confirmar reajuste de preço"
+                descricao="A partir da data escolhida, o novo valor passa a valer. Lançamentos já criados não mudam de valor — histórico financeiro nunca é reescrito."
+                rotuloConfirmar="Sim, aplicar reajuste"
+                disabled={!novoValor}
+                onConfirmar={handleReajustar}
+              />
               <Button type="button" variant="ghost" size="sm" onClick={() => setReajustando(false)}>
                 Cancelar
               </Button>
@@ -288,9 +308,14 @@ export function FinanceiroSection({
               </div>
             </div>
             <div className="flex gap-2">
-              <Button type="button" size="sm" disabled={!ajusteValor || !ajusteDescricao.trim()} onClick={handleCriarAjuste}>
-                Salvar lançamento
-              </Button>
+              <ConfirmarAcao
+                rotulo="Salvar lançamento"
+                titulo="Confirmar lançamento manual"
+                descricao={`${ajusteTipo === 'desconto' ? 'Desconto' : 'Ajuste'} de ${formatarCompetencia(ajusteCompetencia)}, sem vínculo com nenhuma sessão.`}
+                rotuloConfirmar="Sim, salvar"
+                disabled={!ajusteValor || !ajusteDescricao.trim()}
+                onConfirmar={handleCriarAjuste}
+              />
               <Button type="button" variant="ghost" size="sm" onClick={() => setAjustando(false)}>
                 Cancelar
               </Button>
@@ -304,22 +329,41 @@ export function FinanceiroSection({
             <p className="mb-1 text-xs font-medium text-muted-foreground">{formatarCompetencia(competencia)}</p>
             <div className="flex flex-col">
               {lancamentosPorCompetencia.get(competencia)!.map((l) => (
-                <div key={l.id} className="flex h-11 items-center gap-3 border-b border-border last:border-0">
-                  <span className="w-[110px] shrink-0 font-mono text-[13.5px] text-muted-foreground">{formatarDataCurtaUtc(l.createdAt)}</span>
-                  <div className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate text-[13.5px] text-foreground">{l.descricao || formatarTipoLancamento(l.tipo)}</span>
+                <div key={l.id} className="flex flex-col gap-1.5 border-b border-border py-1.5 last:border-0">
+                  <div className="flex h-8 items-center gap-3">
+                    <span className="w-[110px] shrink-0 font-mono text-[13.5px] text-muted-foreground">{formatarDataCurtaUtc(l.createdAt)}</span>
+                    <div className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate text-[13.5px] text-foreground">{l.descricao || formatarTipoLancamento(l.tipo)}</span>
+                    </div>
+                    <span className="w-[120px] shrink-0 text-right font-mono text-[13.5px] text-foreground">{formatarCentavos(l.valorCentavos)}</span>
+                    <div className="flex w-[90px] shrink-0 justify-end">
+                      <Badge variant={l.status === 'pago' ? 'success' : l.status === 'cancelado' ? 'outline' : 'warn'}>
+                        {formatarStatusLancamento(l.status)}
+                      </Badge>
+                    </div>
                   </div>
-                  <span className="w-[120px] shrink-0 text-right font-mono text-[13.5px] text-foreground">{formatarCentavos(l.valorCentavos)}</span>
-                  <div className="flex w-[110px] shrink-0 items-center justify-end gap-2">
-                    <Badge variant={l.status === 'pago' ? 'success' : l.status === 'cancelado' ? 'outline' : 'warn'}>
-                      {formatarStatusLancamento(l.status)}
-                    </Badge>
-                    {l.status === 'pendente' && (
-                      <button type="button" className="text-[12.5px] text-muted-foreground hover:text-foreground" onClick={() => onCancelarLancamento(l.id)}>
-                        Cancelar
-                      </button>
-                    )}
-                  </div>
+                  {l.status === 'pendente' && (
+                    <div className="flex justify-end">
+                      <ConfirmarAcao
+                        rotulo="Cancelar"
+                        titulo="Cancelar lançamento"
+                        descricao="Fica marcado como cancelado, sem cobrança. Dá pra reabrir depois, se for engano."
+                        rotuloConfirmar="Sim, cancelar"
+                        onConfirmar={() => onCancelarLancamento(l.id)}
+                      />
+                    </div>
+                  )}
+                  {l.status === 'cancelado' && (
+                    <div className="flex justify-end">
+                      <ConfirmarAcao
+                        rotulo="Reabrir"
+                        titulo="Reabrir lançamento"
+                        descricao="Volta pra pendente, como se nunca tivesse sido cancelado."
+                        rotuloConfirmar="Sim, reabrir"
+                        onConfirmar={() => onReabrirLancamento(l.id)}
+                      />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -341,41 +385,82 @@ export function FinanceiroSection({
                 <span className="text-foreground">
                   {formatarCentavos(p.valorCentavos)} · {formatarMeioPagamento(p.meio)} · {formatarDataBr(p.data)}
                 </span>
-                {p.reciboEmitidoEm ? (
-                  <span className="text-xs text-muted-foreground">
-                    Recibo emitido em {formatarDataBr(p.reciboEmitidoEm)} — ref. {p.reciboReferencia}
-                  </span>
-                ) : (
-                  emitindoReciboId !== p.id && (
-                    <Button type="button" variant="outline" size="sm" onClick={() => abrirEmitirRecibo(p.id)}>
-                      Marcar recibo emitido
-                    </Button>
-                  )
-                )}
+                {p.estornadoEm && <Badge variant="destructive">Estornado</Badge>}
               </div>
               <span className="text-xs text-muted-foreground">Pagador: {p.pagadorNome}{p.pagadorCpf ? ` (${p.pagadorCpf})` : ''}</span>
 
-              {emitindoReciboId === p.id && (
-                <div className="flex items-end gap-2 rounded-md bg-muted p-2">
-                  <div className="flex flex-col gap-1">
-                    <Label htmlFor={`recibo-data-${p.id}`}>Data</Label>
-                    <Input id={`recibo-data-${p.id}`} type="date" value={reciboData} onChange={(e) => setReciboData(e.target.value)} />
+              {p.estornadoEm ? (
+                <span className="text-xs text-muted-foreground">
+                  Estornado em {formatarDataHoraBr(p.estornadoEm)} — {p.motivoEstorno}
+                </span>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    {p.reciboEmitidoEm ? (
+                      <span className="text-xs text-muted-foreground">
+                        Recibo emitido em {formatarDataBr(p.reciboEmitidoEm)} — ref. {p.reciboReferencia}
+                      </span>
+                    ) : (
+                      <span />
+                    )}
+                    {emitindoReciboId !== p.id && (
+                      <Button type="button" variant="ghost" size="sm" onClick={() => abrirEmitirRecibo(p)}>
+                        {p.reciboEmitidoEm ? 'Editar recibo' : 'Marcar recibo emitido'}
+                      </Button>
+                    )}
                   </div>
-                  <div className="flex flex-col gap-1">
-                    <Label htmlFor={`recibo-referencia-${p.id}`}>Referência</Label>
-                    <Input
-                      id={`recibo-referencia-${p.id}`}
-                      value={reciboReferencia}
-                      onChange={(e) => setReciboReferencia(e.target.value)}
+
+                  {emitindoReciboId === p.id && (
+                    <div className="flex items-end gap-2 rounded-md bg-muted p-2">
+                      <div className="flex flex-col gap-1">
+                        <Label htmlFor={`recibo-data-${p.id}`}>Data</Label>
+                        <Input id={`recibo-data-${p.id}`} type="date" value={reciboData} onChange={(e) => setReciboData(e.target.value)} />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <Label htmlFor={`recibo-referencia-${p.id}`}>Referência</Label>
+                        <Input
+                          id={`recibo-referencia-${p.id}`}
+                          value={reciboReferencia}
+                          onChange={(e) => setReciboReferencia(e.target.value)}
+                        />
+                      </div>
+                      <Button type="button" size="sm" disabled={!reciboReferencia.trim()} onClick={handleMarcarRecibo}>
+                        Confirmar
+                      </Button>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setEmitindoReciboId(null)}>
+                        Cancelar
+                      </Button>
+                    </div>
+                  )}
+
+                  <div className="flex justify-end">
+                    <ConfirmarAcao
+                      rotulo="Estornar pagamento"
+                      titulo="Estornar pagamento"
+                      variant="destructive"
+                      pedirMotivo
+                      motivoLabel="Motivo do estorno"
+                      descricao={
+                        <>
+                          <p>
+                            O pagamento continua registrado, marcado como estornado. Os lançamentos que ele cobria
+                            voltam a pendente.
+                          </p>
+                          {p.reciboEmitidoEm && (
+                            <p>
+                              Este pagamento já tem recibo emitido em {formatarDataBr(p.reciboEmitidoEm)}. Estornar
+                              aqui não desfaz a emissão — resolva isso separadamente se necessário.
+                            </p>
+                          )}
+                        </>
+                      }
+                      rotuloConfirmar="Sim, estornar"
+                      onConfirmar={async (motivo) => {
+                        await onEstornarPagamento(p.id, { motivo: motivo ?? '' })
+                      }}
                     />
                   </div>
-                  <Button type="button" size="sm" disabled={!reciboReferencia.trim()} onClick={handleMarcarRecibo}>
-                    Confirmar
-                  </Button>
-                  <Button type="button" variant="ghost" size="sm" onClick={() => setEmitindoReciboId(null)}>
-                    Cancelar
-                  </Button>
-                </div>
+                </>
               )}
             </div>
           ))}

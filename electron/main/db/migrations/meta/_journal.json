@@ -36,6 +36,27 @@
       "when": 1785695502748,
       "tag": "0004_anexo",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1786477201715,
+      "tag": "0005_pagamento_estorno",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1786978141007,
+      "tag": "0006_mensagens_confirmacao",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1787055544626,
+      "tag": "0007_informacoes_clinicas",
+      "breakpoints": true
     }
   ]
 }

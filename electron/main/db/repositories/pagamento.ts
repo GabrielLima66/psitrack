@@ -23,6 +23,11 @@ export const marcarReciboEmitidoInputSchema = z.object({
 })
 export type MarcarReciboEmitidoInput = z.input<typeof marcarReciboEmitidoInputSchema>
 
+export const estornarPagamentoInputSchema = z.object({
+  motivo: z.string().trim().min(1, 'Motivo do estorno é obrigatório.')
+})
+export type EstornarPagamentoInput = z.input<typeof estornarPagamentoInputSchema>
+
 export type Pagamento = typeof pagamento.$inferSelect
 
 function obterPagamentoOuFalhar(db: PsiTrackDatabase, id: string): Pagamento {
@@ -94,4 +99,39 @@ export function marcarReciboEmitido(db: PsiTrackDatabase, id: string, input: Mar
     .where(eq(pagamento.id, id))
     .run()
   return obterPagamentoOuFalhar(db, id)
+}
+
+/**
+ * Estorno rastreável, nunca exclusão: o pagamento nunca some da lista, só
+ * ganha `estornadoEm`/`motivoEstorno` — mesmo raciocínio de reajuste de
+ * contrato e retificação de evolução, nunca reescrever histórico. Os
+ * lançamentos que esse pagamento cobria voltam pra `pendente` com
+ * `pagamentoId` limpo, exatamente como estavam antes de serem pagos.
+ * Não bloqueia quando já tem recibo emitido (D18: registro de algo feito
+ * fora do app — o app não tem como saber se a emissão real foi desfeita);
+ * quem chama decide se avisa antes de confirmar.
+ */
+export function estornarPagamento(db: PsiTrackDatabase, id: string, input: EstornarPagamentoInput): Pagamento {
+  const parsed = estornarPagamentoInputSchema.parse(input)
+
+  const executar = db.$client.transaction((): Pagamento => {
+    const atual = obterPagamentoOuFalhar(db, id)
+    if (atual.estornadoEm) {
+      throw new Error('Este pagamento já foi estornado.')
+    }
+    const now = new Date().toISOString()
+
+    db.update(pagamento)
+      .set({ estornadoEm: now, motivoEstorno: parsed.motivo, updatedAt: now })
+      .where(eq(pagamento.id, id))
+      .run()
+
+    db.update(lancamento)
+      .set({ status: 'pendente', pagamentoId: null, updatedAt: now })
+      .where(and(eq(lancamento.pagamentoId, id), eq(lancamento.status, 'pago')))
+      .run()
+
+    return obterPagamentoOuFalhar(db, id)
+  })
+  return executar()
 }

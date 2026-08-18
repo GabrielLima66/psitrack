@@ -1,6 +1,7 @@
 import type { PsiTrackDatabase } from '../connection'
 import { utcParaDataLocal } from '../timezone'
 import { criarContratoPreco, type ContratoPrecoInput } from './contratoPreco'
+import { fichaClinicaObrigatoriaSchema, salvarFichaClinica, type FichaClinicaObrigatoria } from './fichaClinica'
 import { criarPaciente, type Paciente, type PacienteInput } from './pacientes'
 import { criarRecorrencia, type RecorrenciaInput } from './recorrencia'
 import { materializarRecorrencia } from './sessao'
@@ -9,6 +10,8 @@ export interface CriarPacienteComAtendimentoInput {
   paciente: PacienteInput
   recorrencias: RecorrenciaInput[]
   contrato: ContratoPrecoInput
+  /** Obrigatória no cadastro (SPEC-fase-5.md, revisão de D49): demanda inicial e abordagem são o ponto de partida do prontuário. */
+  fichaClinica: FichaClinicaObrigatoria
 }
 
 /**
@@ -26,9 +29,15 @@ export interface CriarPacienteComAtendimentoInput {
  * executando já roda dentro do mesmo BEGIN/COMMIT — não precisa do `tx`.
  */
 export function criarPacienteComAtendimento(db: PsiTrackDatabase, input: CriarPacienteComAtendimentoInput): Paciente {
+  // Validado ANTES de abrir a transação: falha de campo obrigatório não
+  // precisa passar por rollback pra ser rejeitada.
+  const ficha = fichaClinicaObrigatoriaSchema.parse(input.fichaClinica)
+
   const executar = db.$client.transaction((): Paciente => {
     const paciente = criarPaciente(db, input.paciente)
     const hojeLocal = utcParaDataLocal(new Date().toISOString())
+
+    salvarFichaClinica(db, paciente.id, ficha)
 
     for (const recorrenciaInput of input.recorrencias) {
       const recorrencia = criarRecorrencia(db, paciente.id, recorrenciaInput)

@@ -80,6 +80,92 @@ export interface ResponsavelInput {
   pagador?: boolean
 }
 
+/**
+ * Informações clínicas (SPEC-fase-5.md) — editáveis, ao contrário de
+ * `Evolucao`: têm `updatedAt`/`deletedAt` e não passam por retificação (D43).
+ */
+export interface FichaClinica {
+  id: string
+  pacienteId: string
+  demandaInicial: string | null
+  abordagem: string | null
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export interface FichaClinicaInput {
+  demandaInicial?: string | null
+  abordagem?: string | null
+}
+
+export interface Medicamento {
+  id: string
+  pacienteId: string
+  nome: string
+  dose: string | null
+  prescritor: string | null
+  inicio: string | null
+  /** `null` = em uso hoje (D44) — o histórico sai do par início/fim, nunca de versionamento. */
+  fim: string | null
+  observacao: string | null
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export interface MedicamentoInput {
+  nome: string
+  dose?: string | null
+  prescritor?: string | null
+  inicio?: string | null
+  fim?: string | null
+  observacao?: string | null
+}
+
+export interface Diagnostico {
+  id: string
+  pacienteId: string
+  descricao: string
+  cid: string | null
+  data: string | null
+  profissional: string | null
+  observacao: string | null
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export interface DiagnosticoInput {
+  descricao: string
+  cid?: string | null
+  data?: string | null
+  profissional?: string | null
+  observacao?: string | null
+}
+
+/** De SAÍDA (D47): ela encaminha a paciente pra outro profissional. A entrada é o campo `origem` do cadastro. */
+export interface Encaminhamento {
+  id: string
+  pacienteId: string
+  paraQuem: string
+  especialidade: string | null
+  data: string
+  motivo: string | null
+  observacao: string | null
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export interface EncaminhamentoInput {
+  paraQuem: string
+  especialidade?: string | null
+  data: string
+  motivo?: string | null
+  observacao?: string | null
+}
+
 export type TipoEvolucao = 'sessao' | 'contato' | 'administrativo'
 
 /** Sem updatedAt/deletedAt — nunca é atualizada nem apagada, correção é `retificaId` apontando pra original. */

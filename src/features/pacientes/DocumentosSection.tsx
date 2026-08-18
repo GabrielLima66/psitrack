@@ -20,8 +20,11 @@ interface DocumentosSectionProps {
   onSalvarCopia: (id: string) => Promise<void>
 }
 
+const MIME_DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+const MIME_DOC = 'application/msword'
+
 function temPreview(mime: string): boolean {
-  return mime === 'application/pdf' || mime.startsWith('image/')
+  return mime === 'application/pdf' || mime === 'text/plain' || mime === MIME_DOCX || mime.startsWith('image/')
 }
 
 /**
@@ -148,7 +151,11 @@ export function DocumentosSection({
               <button
                 type="button"
                 className="text-[12.5px] text-muted-foreground hover:text-foreground"
-                title="Copia o arquivo decifrado pra fora da proteção do app"
+                title={
+                  anexo.mime === MIME_DOC
+                    ? '.doc antigo não tem visualização embutida — copia o arquivo decifrado pra fora da proteção do app'
+                    : 'Copia o arquivo decifrado pra fora da proteção do app'
+                }
                 onClick={() => void onSalvarCopia(anexo.id)}
               >
                 Salvar cópia

@@ -187,6 +187,8 @@ export interface Sessao {
   status: StatusSessao
   statusAlteradoEm: string | null
   avisadaEm: string | null
+  /** Não confundir com avisadaEm (paciente avisando falta) — este é a psicóloga confirmando que mandou o lembrete de sessão. */
+  lembreteEnviadoEm: string | null
   motivo: string | null
   remarcadaParaId: string | null
   observacao: string | null // logística, NUNCA clínico
@@ -197,6 +199,12 @@ export interface Sessao {
 
 export interface SessaoComPaciente extends Sessao {
   pacienteNome: string
+}
+
+export interface SessaoConfirmacao extends Sessao {
+  pacienteNome: string
+  pacienteNomeSocial: string | null
+  telefoneContato: string | null
 }
 
 export interface CriarSessaoAvulsaInput {
@@ -245,11 +253,18 @@ export interface ContratoPrecoInput {
   observacao?: string | null
 }
 
-/** Paciente + N recorrências + contrato inicial, tudo numa transação (D24). */
+/**
+ * Paciente + N recorrências + contrato inicial + quadro clínico, tudo numa
+ * transação (D24). `fichaClinica` é obrigatória aqui (SPEC-fase-5.md,
+ * revisão de D49) — demanda inicial e abordagem são o ponto de partida do
+ * prontuário; editar depois de criado é opcional (mesmo raciocínio de
+ * `FichaClinicaInput`, que aceita campo vazio).
+ */
 export interface CriarPacienteComAtendimentoInput {
   paciente: PacienteInput
   recorrencias: RecorrenciaInput[]
   contrato: ContratoPrecoInput
+  fichaClinica: { demandaInicial: string; abordagem: string }
 }
 
 export type TipoLancamento = 'sessao' | 'falta' | 'ajuste' | 'desconto'
@@ -310,6 +325,9 @@ export interface Pagamento {
   pagadorCpf: string | null
   reciboEmitidoEm: string | null
   reciboReferencia: string | null
+  /** Gravado uma vez, nunca reescrito — pagamento estornado continua listado, nunca some (D-estorno rastreável). */
+  estornadoEm: string | null
+  motivoEstorno: string | null
   createdAt: string
   updatedAt: string
   deletedAt: string | null
@@ -327,6 +345,27 @@ export interface RegistrarPagamentoInput {
 export interface MarcarReciboEmitidoInput {
   data: string
   referencia: string
+}
+
+export interface EstornarPagamentoInput {
+  motivo: string
+}
+
+/** Flat de propósito — sem `tipo`, só existe um uso hoje (confirmação de sessão). */
+export interface MensagemTemplate {
+  id: string
+  nome: string
+  corpo: string // placeholders: {paciente} {data} {hora} {modalidade}
+  padrao: boolean
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export interface MensagemTemplateInput {
+  nome: string
+  corpo: string
+  padrao?: boolean
 }
 
 export interface RecebidoPorMeio {
@@ -389,6 +428,92 @@ export interface AnexarViaDialogoInput {
   classificacao: ClassificacaoAnexo
   evolucaoId?: string | null
   descricao?: string | null
+}
+
+/**
+ * Informações clínicas (SPEC-fase-5.md) — editáveis, ao contrário de
+ * `Evolucao`: têm `updatedAt`/`deletedAt` e não passam por retificação (D43).
+ */
+export interface FichaClinica {
+  id: string
+  pacienteId: string
+  demandaInicial: string | null
+  abordagem: string | null
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export interface FichaClinicaInput {
+  demandaInicial?: string | null
+  abordagem?: string | null
+}
+
+export interface Medicamento {
+  id: string
+  pacienteId: string
+  nome: string
+  dose: string | null
+  prescritor: string | null
+  inicio: string | null
+  /** `null` = em uso hoje (D44) — o histórico sai do par início/fim, nunca de versionamento. */
+  fim: string | null
+  observacao: string | null
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export interface MedicamentoInput {
+  nome: string
+  dose?: string | null
+  prescritor?: string | null
+  inicio?: string | null
+  fim?: string | null
+  observacao?: string | null
+}
+
+export interface Diagnostico {
+  id: string
+  pacienteId: string
+  descricao: string
+  cid: string | null
+  data: string | null
+  profissional: string | null
+  observacao: string | null
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export interface DiagnosticoInput {
+  descricao: string
+  cid?: string | null
+  data?: string | null
+  profissional?: string | null
+  observacao?: string | null
+}
+
+/** De SAÍDA (D47): ela encaminha a paciente pra outro profissional. A entrada é o campo `origem` do cadastro. */
+export interface Encaminhamento {
+  id: string
+  pacienteId: string
+  paraQuem: string
+  especialidade: string | null
+  data: string
+  motivo: string | null
+  observacao: string | null
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export interface EncaminhamentoInput {
+  paraQuem: string
+  especialidade?: string | null
+  data: string
+  motivo?: string | null
+  observacao?: string | null
 }
 
 export interface BackupBlobEntry {
@@ -551,6 +676,36 @@ const api = {
       ipcRenderer.invoke('anotacao:atualizar', id, input),
     excluir: (id: string): Promise<IpcResult> => ipcRenderer.invoke('anotacao:excluir', id)
   },
+  clinico: {
+    obterFicha: (pacienteId: string): Promise<IpcResult<{ ficha: FichaClinica | null }>> =>
+      ipcRenderer.invoke('clinico:obterFicha', pacienteId),
+    salvarFicha: (pacienteId: string, input: FichaClinicaInput): Promise<IpcResult<{ ficha: FichaClinica }>> =>
+      ipcRenderer.invoke('clinico:salvarFicha', pacienteId, input),
+
+    listarMedicamentos: (pacienteId: string): Promise<IpcResult<{ medicamentos: Medicamento[] }>> =>
+      ipcRenderer.invoke('clinico:listarMedicamentos', pacienteId),
+    criarMedicamento: (pacienteId: string, input: MedicamentoInput): Promise<IpcResult<{ medicamento: Medicamento }>> =>
+      ipcRenderer.invoke('clinico:criarMedicamento', pacienteId, input),
+    atualizarMedicamento: (id: string, input: MedicamentoInput): Promise<IpcResult<{ medicamento: Medicamento }>> =>
+      ipcRenderer.invoke('clinico:atualizarMedicamento', id, input),
+    removerMedicamento: (id: string): Promise<IpcResult> => ipcRenderer.invoke('clinico:removerMedicamento', id),
+
+    listarDiagnosticos: (pacienteId: string): Promise<IpcResult<{ diagnosticos: Diagnostico[] }>> =>
+      ipcRenderer.invoke('clinico:listarDiagnosticos', pacienteId),
+    criarDiagnostico: (pacienteId: string, input: DiagnosticoInput): Promise<IpcResult<{ diagnostico: Diagnostico }>> =>
+      ipcRenderer.invoke('clinico:criarDiagnostico', pacienteId, input),
+    atualizarDiagnostico: (id: string, input: DiagnosticoInput): Promise<IpcResult<{ diagnostico: Diagnostico }>> =>
+      ipcRenderer.invoke('clinico:atualizarDiagnostico', id, input),
+    removerDiagnostico: (id: string): Promise<IpcResult> => ipcRenderer.invoke('clinico:removerDiagnostico', id),
+
+    listarEncaminhamentos: (pacienteId: string): Promise<IpcResult<{ encaminhamentos: Encaminhamento[] }>> =>
+      ipcRenderer.invoke('clinico:listarEncaminhamentos', pacienteId),
+    criarEncaminhamento: (pacienteId: string, input: EncaminhamentoInput): Promise<IpcResult<{ encaminhamento: Encaminhamento }>> =>
+      ipcRenderer.invoke('clinico:criarEncaminhamento', pacienteId, input),
+    atualizarEncaminhamento: (id: string, input: EncaminhamentoInput): Promise<IpcResult<{ encaminhamento: Encaminhamento }>> =>
+      ipcRenderer.invoke('clinico:atualizarEncaminhamento', id, input),
+    removerEncaminhamento: (id: string): Promise<IpcResult> => ipcRenderer.invoke('clinico:removerEncaminhamento', id)
+  },
   recorrencia: {
     listar: (pacienteId: string): Promise<IpcResult<{ recorrencias: Recorrencia[] }>> =>
       ipcRenderer.invoke('recorrencia:listar', pacienteId),
@@ -575,7 +730,22 @@ const api = {
     remarcar: (id: string, input: RemarcarSessaoInput): Promise<IpcResult<{ origem: Sessao; destino: Sessao }>> =>
       ipcRenderer.invoke('sessao:remarcar', id, input),
     sobreposicao: (inicioUtc: string, duracaoMin: number, excludingId?: string): Promise<IpcResult<{ colisoes: SessaoComPaciente[] }>> =>
-      ipcRenderer.invoke('sessao:sobreposicao', inicioUtc, duracaoMin, excludingId)
+      ipcRenderer.invoke('sessao:sobreposicao', inicioUtc, duracaoMin, excludingId),
+    listarConfirmacaoDoDia: (dataLocal: string): Promise<IpcResult<{ sessoes: SessaoConfirmacao[] }>> =>
+      ipcRenderer.invoke('sessao:listarConfirmacaoDoDia', dataLocal),
+    definirLembreteEnviado: (id: string, enviado: boolean): Promise<IpcResult<{ sessao: Sessao }>> =>
+      ipcRenderer.invoke('sessao:definirLembreteEnviado', id, enviado)
+  },
+  mensagem: {
+    listarTemplates: (): Promise<IpcResult<{ templates: MensagemTemplate[] }>> => ipcRenderer.invoke('mensagem:listarTemplates'),
+    criarTemplate: (input: MensagemTemplateInput): Promise<IpcResult<{ template: MensagemTemplate }>> =>
+      ipcRenderer.invoke('mensagem:criarTemplate', input),
+    atualizarTemplate: (id: string, input: MensagemTemplateInput): Promise<IpcResult<{ template: MensagemTemplate }>> =>
+      ipcRenderer.invoke('mensagem:atualizarTemplate', id, input),
+    removerTemplate: (id: string): Promise<IpcResult> => ipcRenderer.invoke('mensagem:removerTemplate', id),
+    /** Abre o WhatsApp com o texto pronto via `shell.openExternal` — o app não envia nada sozinho. */
+    enviarConfirmacao: (sessaoId: string, telefone: string | null, texto: string): Promise<IpcResult<{ sessao: Sessao; link: string }>> =>
+      ipcRenderer.invoke('mensagem:enviarConfirmacao', sessaoId, telefone, texto)
   },
   contrato: {
     vigente: (pacienteId: string, data: string): Promise<IpcResult<{ contrato: ContratoPreco | null }>> =>
@@ -594,6 +764,8 @@ const api = {
     criarAjuste: (pacienteId: string, input: LancamentoAjusteInput): Promise<IpcResult<{ lancamento: Lancamento }>> =>
       ipcRenderer.invoke('lancamento:criarAjuste', pacienteId, input),
     cancelar: (id: string): Promise<IpcResult<{ lancamento: Lancamento }>> => ipcRenderer.invoke('lancamento:cancelar', id),
+    /** Desfaz um cancelamento — só aceito se o lançamento ainda estiver `cancelado`. */
+    reabrir: (id: string): Promise<IpcResult<{ lancamento: Lancamento }>> => ipcRenderer.invoke('lancamento:reabrir', id),
     listarPendentesTodos: (): Promise<IpcResult<{ lancamentos: LancamentoComPaciente[] }>> =>
       ipcRenderer.invoke('lancamento:listarPendentesTodos')
   },
@@ -603,7 +775,10 @@ const api = {
     listar: (pacienteId: string): Promise<IpcResult<{ pagamentos: Pagamento[] }>> =>
       ipcRenderer.invoke('pagamento:listar', pacienteId),
     marcarReciboEmitido: (id: string, input: MarcarReciboEmitidoInput): Promise<IpcResult<{ pagamento: Pagamento }>> =>
-      ipcRenderer.invoke('pagamento:marcarReciboEmitido', id, input)
+      ipcRenderer.invoke('pagamento:marcarReciboEmitido', id, input),
+    /** Estorno rastreável — nunca apaga o pagamento, só marca; lançamentos ligados voltam a 'pendente'. */
+    estornar: (id: string, input: EstornarPagamentoInput): Promise<IpcResult<{ pagamento: Pagamento }>> =>
+      ipcRenderer.invoke('pagamento:estornar', id, input)
   },
   relatorio: {
     mensal: (competencia: string): Promise<IpcResult<{ relatorio: RelatorioMensal }>> =>

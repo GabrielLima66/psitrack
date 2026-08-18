@@ -7,8 +7,10 @@ import { registerAnexosHandlers } from './ipc/anexos'
 import { registerAnotacoesHandlers } from './ipc/anotacoes'
 import { registerAppHandlers } from './ipc/app'
 import { registerBackupHandlers } from './ipc/backup'
+import { registerClinicoHandlers } from './ipc/clinico'
 import { registerEvolucaoHandlers } from './ipc/evolucao'
 import { registerFinanceiroHandlers } from './ipc/financeiro'
+import { registerMensagensHandlers } from './ipc/mensagens'
 import { registerPacientesHandlers } from './ipc/pacientes'
 import { getDb, registerVaultHandlers } from './ipc/vault'
 import { KeySession } from './crypto/session'
@@ -65,10 +67,12 @@ app.whenReady().then(() => {
   registerAppHandlers()
   registerVaultHandlers(session)
   registerPacientesHandlers()
+  registerClinicoHandlers()
   registerEvolucaoHandlers()
   registerAnotacoesHandlers()
   registerAgendaHandlers()
   registerFinanceiroHandlers()
+  registerMensagensHandlers()
   registerAnexosHandlers(session)
   registerBackupHandlers(session)
   registerUpdateHandlers(session)

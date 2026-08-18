@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { formatarDataCurta, formatarDiaSemanaAbrev, formatarHoraLocal, formatarIntervaloDatas } from './formatters'
 import { alturaTotal, COPIAS, posYCiclico, rotulosHora, scrollInicial, scrollRealocado } from './grade'
+import { PainelConfirmacoesDoDia } from '../mensagens/PainelConfirmacoesDoDia'
 import { NovaSessaoForm } from './NovaSessaoForm'
 import { PainelSessao } from './PainelSessao'
 import { SessaoCard } from './SessaoCard'
@@ -236,6 +237,8 @@ export function AgendaScreen() {
           </Alert>
         )}
       </div>
+
+      <PainelConfirmacoesDoDia />
 
       <div ref={gradeRef} onScroll={handleScrollLoop} className="min-h-0 flex-1 overflow-y-auto rounded-[0.625rem] border border-border">
         <div className="flex">

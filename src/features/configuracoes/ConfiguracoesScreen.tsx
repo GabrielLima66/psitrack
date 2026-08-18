@@ -11,8 +11,9 @@ import { formatarBytes, formatarDataHoraBr } from './formatters'
 import { HistoricoAutomaticoSection } from './HistoricoAutomaticoSection'
 import { RetencaoSection } from './RetencaoSection'
 import { useConfiguracoesStore } from './store'
+import { TemplatesSection } from '../mensagens/TemplatesSection'
 
-type AbaConfiguracoes = 'backup' | 'retencao' | 'seguranca' | 'sobre'
+type AbaConfiguracoes = 'backup' | 'retencao' | 'seguranca' | 'mensagens' | 'sobre'
 
 const OPCOES_APARENCIA: { value: Aparencia; label: string }[] = [
   { value: 'light', label: 'Claro' },
@@ -24,6 +25,7 @@ const ABAS: { id: AbaConfiguracoes; label: string; subtitulo: string }[] = [
   { id: 'backup', label: 'Backup', subtitulo: 'Local, destino externo e restauração' },
   { id: 'retencao', label: 'Retenção', subtitulo: 'Política GFS e purga' },
   { id: 'seguranca', label: 'Segurança', subtitulo: 'Senha mestra, bloqueio, recuperação' },
+  { id: 'mensagens', label: 'Mensagens', subtitulo: 'Modelos de confirmação de sessão' },
   { id: 'sobre', label: 'Sobre', subtitulo: 'Versão e execuções automáticas' }
 ]
 
@@ -265,6 +267,8 @@ export function ConfiguracoesScreen() {
               </Alert>
             </>
           )}
+
+          {aba === 'mensagens' && <TemplatesSection />}
 
           {aba === 'sobre' && (
             <>

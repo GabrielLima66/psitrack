@@ -46,6 +46,11 @@ export function AtendimentoInicialSection({
   const [duracaoMin, setDuracaoMin] = useState(50)
   const [modalidade, setModalidade] = useState<ModalidadeAtendimento>('presencial')
   const [conflitos, setConflitos] = useState<ConflitoRecorrencia[]>([])
+  // String bruta do campo, independente do centavos derivado — reformatar o
+  // value a cada tecla (via toFixed) corrompe a digitação de valor com mais
+  // de um dígito, porque cada tecla nova é anexada a um "X.00" já reescrito
+  // em vez de estender o que a usuária digitou.
+  const [valorInput, setValorInput] = useState(contrato.valorCentavos > 0 ? (contrato.valorCentavos / 100).toFixed(2) : '')
 
   function adicionarRascunho(): void {
     // vigenciaInicio = hoje: a série começa no dia do cadastro, não é campo editável aqui.
@@ -61,8 +66,6 @@ export function AtendimentoInicialSection({
     }
     adicionarRascunho()
   }
-
-  const valorReais = contrato.valorCentavos > 0 ? (contrato.valorCentavos / 100).toFixed(2) : ''
 
   return (
     <div className="overflow-hidden rounded-[0.625rem] border border-border bg-card">
@@ -142,10 +145,11 @@ export function AtendimentoInicialSection({
             type="number"
             min={0}
             step="0.01"
-            value={valorReais}
-            onChange={(event) =>
+            value={valorInput}
+            onChange={(event) => {
+              setValorInput(event.target.value)
               onContratoChange({ ...contrato, valorCentavos: Math.round(Number(event.target.value || 0) * 100) })
-            }
+            }}
           />
         </div>
         <div className="flex flex-col gap-1">

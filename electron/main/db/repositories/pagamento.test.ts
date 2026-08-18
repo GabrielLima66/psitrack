@@ -7,7 +7,7 @@ import { runMigrations } from '../migrate'
 import { createTempDbPath } from '../test-support'
 import { criarContratoPreco } from './contratoPreco'
 import { criarLancamentoAjuste, listarLancamentosPaciente } from './lancamento'
-import { marcarReciboEmitido, registrarPagamento } from './pagamento'
+import { estornarPagamento, marcarReciboEmitido, registrarPagamento } from './pagamento'
 import { criarPaciente } from './pacientes'
 
 const MIGRATIONS_FOLDER = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'migrations')
@@ -100,5 +100,45 @@ describe('marcarReciboEmitido', () => {
     const atualizado = marcarReciboEmitido(db, pagamento.id, { data: '2026-03-16', referencia: 'RS-000123' })
     expect(atualizado.reciboEmitidoEm).toBe('2026-03-16')
     expect(atualizado.reciboReferencia).toBe('RS-000123')
+  })
+})
+
+describe('estornarPagamento', () => {
+  it('marca estornadoEm/motivoEstorno e devolve os lançamentos vinculados a pendente, sem pagamentoId', () => {
+    const l1 = criarLancamentoAjuste(db, pacienteId, { tipo: 'ajuste', valorCentavos: 15000, descricao: 'x', competencia: '2026-03' })
+    const pagamento = registrarPagamento(db, pacienteId, { lancamentoIds: [l1.id], data: '2026-03-15', meio: 'pix', pagadorNome: 'X' })
+
+    const estornado = estornarPagamento(db, pagamento.id, { motivo: 'Marcado como pago por engano' })
+    expect(estornado.estornadoEm).not.toBeNull()
+    expect(estornado.motivoEstorno).toBe('Marcado como pago por engano')
+
+    const [atualizado] = listarLancamentosPaciente(db, pacienteId)
+    expect(atualizado?.status).toBe('pendente')
+    expect(atualizado?.pagamentoId).toBeNull()
+  })
+
+  it('exige motivo não vazio', () => {
+    const l1 = criarLancamentoAjuste(db, pacienteId, { tipo: 'ajuste', valorCentavos: 15000, descricao: 'x', competencia: '2026-03' })
+    const pagamento = registrarPagamento(db, pacienteId, { lancamentoIds: [l1.id], data: '2026-03-15', meio: 'pix', pagadorNome: 'X' })
+
+    expect(() => estornarPagamento(db, pagamento.id, { motivo: '  ' })).toThrow()
+  })
+
+  it('bloqueia estornar um pagamento já estornado', () => {
+    const l1 = criarLancamentoAjuste(db, pacienteId, { tipo: 'ajuste', valorCentavos: 15000, descricao: 'x', competencia: '2026-03' })
+    const pagamento = registrarPagamento(db, pacienteId, { lancamentoIds: [l1.id], data: '2026-03-15', meio: 'pix', pagadorNome: 'X' })
+    estornarPagamento(db, pagamento.id, { motivo: 'Primeiro estorno' })
+
+    expect(() => estornarPagamento(db, pagamento.id, { motivo: 'Segundo estorno' })).toThrow()
+  })
+
+  it('não bloqueia estorno quando o recibo já foi emitido', () => {
+    const l1 = criarLancamentoAjuste(db, pacienteId, { tipo: 'ajuste', valorCentavos: 15000, descricao: 'x', competencia: '2026-03' })
+    const pagamento = registrarPagamento(db, pacienteId, { lancamentoIds: [l1.id], data: '2026-03-15', meio: 'pix', pagadorNome: 'X' })
+    marcarReciboEmitido(db, pagamento.id, { data: '2026-03-16', referencia: 'RS-000123' })
+
+    const estornado = estornarPagamento(db, pagamento.id, { motivo: 'Estorno mesmo com recibo emitido' })
+    expect(estornado.estornadoEm).not.toBeNull()
+    expect(estornado.reciboEmitidoEm).toBe('2026-03-16') // recibo emitido não é apagado pelo estorno
   })
 })

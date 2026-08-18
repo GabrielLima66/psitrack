@@ -54,6 +54,8 @@ export interface Sessao {
   status: StatusSessao
   statusAlteradoEm: string | null
   avisadaEm: string | null
+  /** Não confundir com avisadaEm (paciente avisando falta) — este é a psicóloga confirmando que mandou o lembrete de sessão. */
+  lembreteEnviadoEm: string | null
   motivo: string | null
   remarcadaParaId: string | null
   observacao: string | null
@@ -116,6 +118,8 @@ export interface CriarPacienteComAtendimentoInput {
   paciente: PacienteInput
   recorrencias: RecorrenciaInput[]
   contrato: ContratoPrecoInput
+  /** Obrigatória no cadastro (SPEC-fase-5.md, revisão de D49) — demanda inicial e abordagem são o ponto de partida do prontuário. */
+  fichaClinica: { demandaInicial: string; abordagem: string }
 }
 
 export type TipoLancamento = 'sessao' | 'falta' | 'ajuste' | 'desconto'
@@ -160,6 +164,8 @@ export interface Pagamento {
   pagadorCpf: string | null
   reciboEmitidoEm: string | null
   reciboReferencia: string | null
+  estornadoEm: string | null
+  motivoEstorno: string | null
   createdAt: string
   updatedAt: string
   deletedAt: string | null
@@ -168,4 +174,8 @@ export interface Pagamento {
 export interface MarcarReciboEmitidoInput {
   data: string
   referencia: string
+}
+
+export interface EstornarPagamentoInput {
+  motivo: string
 }
